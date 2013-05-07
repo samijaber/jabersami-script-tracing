@@ -559,6 +559,12 @@ class CodeExecutionSupport(
   def isWorksheet(code: String) = {
     code.indexOf("#worksheet") != -1
   }
+  
+  def traceScript() {
+      val tracer = new Tracing()
+	  val code2run = codeToRun
+	  tracer.trace(code2run.code)
+  }
 
   def compileRunCode() {
     val code2run = codeToRun
