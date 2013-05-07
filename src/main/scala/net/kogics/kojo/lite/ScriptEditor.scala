@@ -376,6 +376,7 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
     val ClearEditor = "ClearEditor"
     val ClearOutput = "ClearOutput"
     val UploadCommand = "UploadCommand"
+    val TraceScript = "TraceScript"
 
     val actionListener = new ActionListener {
       def actionPerformed(e: ActionEvent) = e.getActionCommand match {
@@ -400,6 +401,10 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
           else {
             execSupport.compileCode()
           }
+      
+        case TraceScript =>
+          execSupport.traceScript()
+          codePane.requestFocusInWindow()
         case StopScript =>
           execSupport.stopScript()
           codePane.requestFocusInWindow()
@@ -442,6 +447,7 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
     val clearSButton = makeNavigationButton("/images/clears.png", ClearEditor, Utils.loadString("S_ClearEditorT"))
     val clearButton = makeNavigationButton("/images/clear24.png", ClearOutput, Utils.loadString("S_ClearOutput"))
     val cexButton = makeNavigationButton("/images/upload.png", UploadCommand, Utils.loadString("S_Upload"))
+    val traceButton = makeNavigationButton("/images/run24.png", TraceScript, Utils.loadString("S_RunScript"))
 
     toolbar.add(runButton)
     toolbar.add(runWorksheetButton)
@@ -465,6 +471,8 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
 
     clearButton.setEnabled(false)
     toolbar.add(clearButton)
+    
+    toolbar.add(traceButton)
 
     (toolbar, runButton, runWorksheetButton, compileButton, stopButton, hNextButton, hPrevButton, clearSButton, clearButton, cexButton)
   }
