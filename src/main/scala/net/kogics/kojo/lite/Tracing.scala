@@ -9,7 +9,9 @@ import com.sun.jdi.Bootstrap
 import com.sun.jdi.StringReference
 import com.sun.jdi.ThreadReference
 import com.sun.jdi.VirtualMachine
+import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.event.EventQueue
+import com.sun.jdi.event.EventSet
 import com.sun.jdi.event.MethodEntryEvent
 import java.io._
 import scala.tools.nsc.Settings
@@ -22,24 +24,26 @@ import scala.tools.reflect.ToolBox
 
 class Tracing {
   
+  var evtSet: EventSet = _
   var initconn: LaunchingConnector = _
   var mainThread: ThreadReference = _
-  
+  var codeFile: BatchSourceFile = _
+  val tmpdir = System.getProperty("java.io.tmpdir")
+  val settings = makeSettings()  
+  val compiler = new Global(settings) 
+  val run = new compiler.Run
+
   def makeSettings() = {
       val iSettings = new Settings()
       iSettings.usejavacp.value = true
-      //      iSettings.deprecation.value = true
-      //      iSettings.feature.value = true
-      //      iSettings.unchecked.value = true
+      iSettings.outputDirs.setSingleOutput(tmpdir)
       iSettings
     }
 
   def compile(code0: String, stopPhase: List[String] = List("cleanup")) = {
-    val settings = makeSettings()  
-    val compiler = new Global(settings) 
-    val code = "object Wrapper { def main(args: Array[String]) { } \n" + code0 + "}"
-    val run = new compiler.Run
-    run.compileSources(List(new BatchSourceFile("scripteditor", code)))
+	val code = "object Wrapper { def main(args: Array[String]) { } \n" + code0 + "}"
+    codeFile = new BatchSourceFile("scripteditor", code)
+    run.compileSources(List(codeFile))
   }  
 
  
@@ -64,7 +68,7 @@ class Tracing {
      throw new Error("Bad launching connector");
     // concatenate all tracer's input args into a single string
     val sb = new StringBuffer();
-    sb.append(" Wrapper ")
+    sb.append(tmpdir + " Wrapper ")
     
     mArgs.setValue(sb.toString()); // assign args to main field
     val vm = connector.launch(connArgs)
@@ -106,29 +110,30 @@ def trace(code: String){
   //Find main thread in target VM
   val allThrds = vm.allThreads
   allThrds.foreach { x => if (x.name == "main") mainThread = x}
-
-  while (true) {
-    val evtSet = evtQueue.remove()
-    for (evt <- evtSet.eventIterator) {
-      evt match {
-        case methodEnterEvt: MethodEntryEvent => 
-          try {
-            //Locate current stackframe, find get value of 'n' variable
-            val frame = mainThread.frame(0)
-            val n = methodEnterEvt.method().arguments()(0)
-            val argval = frame.getValue(n)
-            println("Method Enter Event (arg n): " + argval)
-            }
-         catch {
-              case _: Throwable => println("Method Enter Event: " + methodEnterEvt.method().name)
-            }
-        case methodExitEvt: MethodExitEvent   => println("Method Exit Event (return value): " + methodExitEvt.returnValue)
-        case _                                => println("Other")
-      }
-    }
-    evtSet.resume()
+  
+  breakable { while (true) {
+    evtSet = evtQueue.remove()
+	for (evt <- evtSet.eventIterator) {
+		evt match {
+		case methodEnterEvt: MethodEntryEvent => 
+		try {
+			//Locate current stackframe, find get value of 'n' variable
+			val frame = mainThread.frame(0)
+					val n = methodEnterEvt.method().arguments()(0)
+					val argval = frame.getValue(n)
+					println("Method Enter Event (arg n): " + argval)
+		}
+		catch {
+		case _: Throwable => println("Method Enter Event: " + methodEnterEvt.method().name)
+		}
+		case methodExitEvt: MethodExitEvent   => println("Method Exit Event (return value): " + methodExitEvt.returnValue)
+		case vmDcEvt: VMDisconnectEvent		  => println("VM Disconnected"); break
+		case _                                => println("Other")
+		}
+	}
+	evtSet.resume()
   }
-}
+}}
 
   def createRequests(excludes : Array[String], vm: VirtualMachine) {
     val evtReqMgr = vm.eventRequestManager
