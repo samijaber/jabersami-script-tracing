@@ -12,25 +12,84 @@ import com.sun.jdi.VirtualMachine
 import com.sun.jdi.event.EventQueue
 import com.sun.jdi.event.MethodEntryEvent
 import java.io._
+import scala.tools.nsc.Settings
+import scala.tools.nsc.Global
+import scala.tools.nsc.reporters._
+
+import scala.reflect.runtime._
+import scala.reflect.internal.util._
+import scala.tools.reflect.ToolBox
 
 class Tracing {
   
   var initconn: LaunchingConnector = _
   var mainThread: ThreadReference = _
+  
+  def makeSettings() = {
+      val iSettings = new Settings()
+      iSettings.usejavacp.value = true
+      //      iSettings.deprecation.value = true
+      //      iSettings.feature.value = true
+      //      iSettings.unchecked.value = true
+      iSettings
+    }
 
-def printToFile(f: java.io.File)(op: java.io.PrintWriter => Unit) {
+  def compile(code0: String, stopPhase: List[String] = List("cleanup")) = {
+    val settings = makeSettings()  
+    val compiler = new Global(settings) 
+    val code = "object Wrapper { def main(args: Array[String]) { } \n" + code0 + "}"
+    val run = new compiler.Run
+    run.compileSources(List(new BatchSourceFile("scripteditor", code)))
+  }  
+
+ 
+  def getVM(initconn : LaunchingConnector) = {
+    var connector = initconn
+
+    val conns = Bootstrap.virtualMachineManager().allConnectors();
+    breakable { 
+      for (conn <- conns) { 
+      if (conn.name().equals("com.sun.jdi.CommandLineLaunch"))
+        {
+          connector = conn.asInstanceOf[LaunchingConnector]
+          break
+        }
+      }
+    }
+
+    // get connector field for program's main() method
+    val connArgs = connector.defaultArguments();
+    val mArgs = connArgs.get("main").asInstanceOf[Connector.Argument]
+    if (mArgs == null)
+     throw new Error("Bad launching connector");
+    // concatenate all tracer's input args into a single string
+    val sb = new StringBuffer();
+    sb.append(" Wrapper ")
+    
+    mArgs.setValue(sb.toString()); // assign args to main field
+    val vm = connector.launch(connArgs)
+    vm
+  }
+ 
+ /* Printing to file is unnecessary now (No need for .scala file, only compiled .class file is needed for tracing)
+  def printToFile(f: java.io.File)(op: java.io.PrintWriter => Unit) {
   val p = new java.io.PrintWriter(f)
   try { op(p) } finally { p.close() }
 }
   
-def trace(code: String){
-  //create the file
+def createWrapper(code: String) {
   val data = Array("object Wrapper { \n def main(args: Array[String]) {} \n", code, "}")
   printToFile(new File("Wrapper.scala"))(p => {
 	  data.foreach(p.println)
   })
+}
+  */
   
+def trace(code: String){
+  //create the file
+  //createWrapper(code)
   
+  val result = compile(code, Nil)
   //Connect to target VM
   val vm = getVM(initconn)
   println("Attached to process '" + vm.name + "'")
@@ -46,11 +105,7 @@ def trace(code: String){
 
   //Find main thread in target VM
   val allThrds = vm.allThreads
-  allThrds.foreach { x =>
-    if (x.name == "main")
-      mainThread = x
-  }
-
+  allThrds.foreach { x => if (x.name == "main") mainThread = x}
 
   while (true) {
     val evtSet = evtQueue.remove()
@@ -89,31 +144,4 @@ def trace(code: String){
     mthdExitVal.enable()
   }
 
-  def getVM(initconn : LaunchingConnector) = {
-    var connector = initconn
-
-    val conns = Bootstrap.virtualMachineManager().allConnectors();
-    breakable { 
-      for (conn <- conns) { 
-      if (conn.name().equals("com.sun.jdi.CommandLineLaunch"))
-        {
-          connector = conn.asInstanceOf[LaunchingConnector]
-          break
-        }
-      }
-    }
-
-    // get connector field for program's main() method
-    val connArgs = connector.defaultArguments();
-    val mArgs = connArgs.get("main").asInstanceOf[Connector.Argument]
-    if (mArgs == null)
-     throw new Error("Bad launching connector");
-    // concatenate all tracer's input args into a single string
-    val sb = new StringBuffer();
-    sb.append(" Wrapper ")
-    
-    mArgs.setValue(sb.toString()); // assign args to main field
-    val vm = connector.launch(connArgs)
-    vm
-  }
 }
