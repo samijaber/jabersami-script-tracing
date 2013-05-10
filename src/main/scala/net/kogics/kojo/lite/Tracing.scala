@@ -31,7 +31,6 @@ class Tracing {
   val tmpdir = System.getProperty("java.io.tmpdir")
   val settings = makeSettings()  
   val compiler = new Global(settings) 
-  val run = new compiler.Run
 
   def makeSettings() = {
       val iSettings = new Settings()
@@ -43,6 +42,7 @@ class Tracing {
   def compile(code0: String, stopPhase: List[String] = List("cleanup")) = {
 	val code = "object Wrapper { def main(args: Array[String]) { } \n" + code0 + "}"
     codeFile = new BatchSourceFile("scripteditor", code)
+	val run = new compiler.Run
     run.compileSources(List(codeFile))
   }  
 
@@ -68,9 +68,13 @@ class Tracing {
      throw new Error("Bad launching connector");
     // concatenate all tracer's input args into a single string
     val sb = new StringBuffer();
-    sb.append(tmpdir + " Wrapper ")
-    
+    sb.append(" Wrapper ")
     mArgs.setValue(sb.toString()); // assign args to main field
+    
+    val opts = connArgs.get("options").asInstanceOf[Connector.Argument]
+    var optionValue = "-classpath " + tmpdir
+	opts.setValue(optionValue)
+
     val vm = connector.launch(connArgs)
     vm
   }
