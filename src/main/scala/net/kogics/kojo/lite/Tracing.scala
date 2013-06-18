@@ -113,7 +113,11 @@ class Tracing {
     //Find main thread in target VM
     val allThrds = vm.allThreads
     allThrds.foreach { x => if (x.name == "main") mainThread = x }
-
+    
+    val creatorGUI = TracingGUI
+    val tracingFrame = creatorGUI.top
+    tracingFrame.visible = true
+    
     breakable {
       while (true) {
         evtSet = evtQueue.remove()
@@ -131,13 +135,27 @@ class Tracing {
                 	var argname = n.name
                 	toprint = " (arg " + n.name + "): " + argval
                  }
-                    
+                
+                //Here, we send the message to the GUI
+                //creatorGUI.addEvent(methodEnterEvt.location().lineNumber)
+                
+                
+                
                 //determine if the method is a Turtle API method
                 methodEnterEvt.method().name match {
                   case "forward" | "right" | "clear" =>                 
-                    println(s"Method Enter Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint)
+                    var strng = s"Method Enter Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
+                    if (mainThread.frames().size > 1)
+                      creatorGUI.addEvent(strng,mainThread.frame(1), mainThread.frame(0))
+                    else
+                      creatorGUI.addEvent(strng,mainThread.frame(0), mainThread.frame(0))
+                    
                   case _ =>
-                    println(s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint)
+                    var strng = s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
+                    if (mainThread.frames().size > 1)
+                      creatorGUI.addEvent(strng,mainThread.frame(1), mainThread.frame(0))
+                    else
+                      creatorGUI.addEvent(strng,mainThread.frame(0), mainThread.frame(0))
                 }
               }
               catch {
@@ -147,9 +165,18 @@ class Tracing {
               //determine if the method is a Turtle API method
                 methodExitEvt.method().name match {
                   case "forward" | "right" | "clear" =>                 
-                    println(s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue)                  
+                    var strng = s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                    if (mainThread.frames().size > 1)
+                      creatorGUI.addEvent(strng,mainThread.frame(1), mainThread.frame(0))
+                    else
+                      creatorGUI.addEvent(strng,mainThread.frame(0), mainThread.frame(0))
+
                   case _ =>
-                    println(s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue)                
+                    var strng = s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                    if (mainThread.frames().size > 1)
+                      creatorGUI.addEvent(strng,mainThread.frame(1), mainThread.frame(0))
+                    else
+                      creatorGUI.addEvent(strng,mainThread.frame(0), mainThread.frame(0))
                }
             case vmDcEvt: VMDisconnectEvent =>
               println("VM Disconnected"); break
