@@ -136,26 +136,14 @@ class Tracing {
                 	toprint = " (arg " + n.name + "): " + argval
                  }
                 
-                //Here, we send the message to the GUI
-                //creatorGUI.addEvent(methodEnterEvt.location().lineNumber)
-                
-                
-                
                 //determine if the method is a Turtle API method
                 methodEnterEvt.method().name match {
                   case "forward" | "right" | "clear" =>                 
                     var strng = s"Method Enter Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    if (mainThread.frames().size > 1)
-                      creatorGUI.addEvent(strng,mainThread.frame(1), mainThread.frame(0))
-                    else
-                      creatorGUI.addEvent(strng,mainThread.frame(0), mainThread.frame(0))
-                    
+                    creatorGUI.addEvent(strng, "entry", true)
                   case _ =>
                     var strng = s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    if (mainThread.frames().size > 1)
-                      creatorGUI.addEvent(strng,mainThread.frame(1), mainThread.frame(0))
-                    else
-                      creatorGUI.addEvent(strng,mainThread.frame(0), mainThread.frame(0))
+                    creatorGUI.addEvent(strng, "entry", false)
                 }
               }
               catch {
@@ -166,17 +154,10 @@ class Tracing {
                 methodExitEvt.method().name match {
                   case "forward" | "right" | "clear" =>                 
                     var strng = s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    if (mainThread.frames().size > 1)
-                      creatorGUI.addEvent(strng,mainThread.frame(1), mainThread.frame(0))
-                    else
-                      creatorGUI.addEvent(strng,mainThread.frame(0), mainThread.frame(0))
-
+                    creatorGUI.addEvent(strng, "exit", true)
                   case _ =>
                     var strng = s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    if (mainThread.frames().size > 1)
-                      creatorGUI.addEvent(strng,mainThread.frame(1), mainThread.frame(0))
-                    else
-                      creatorGUI.addEvent(strng,mainThread.frame(0), mainThread.frame(0))
+                    creatorGUI.addEvent(strng, "exit", false)
                }
             case vmDcEvt: VMDisconnectEvent =>
               println("VM Disconnected"); break
