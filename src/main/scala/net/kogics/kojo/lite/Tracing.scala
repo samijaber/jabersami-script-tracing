@@ -167,6 +167,7 @@ class Tracing {
         evtSet.resume()
       }
     }
+    creatorGUI.printAll()
   }
 
   def createRequests(excludes: Array[String], vm: VirtualMachine) {
