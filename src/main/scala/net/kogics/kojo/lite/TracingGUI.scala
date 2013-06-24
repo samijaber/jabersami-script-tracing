@@ -11,15 +11,14 @@ class event {
   var subcalls = new Array[event](0)
   var parent: event = null
   
-  def isOver() = ended = true
-  def addChild(c : event) = {c.setParent(this); subcalls :+ c}
-  def setParent(p: event) = parent = p
+  def isOver() {ended = true}
+  def addChild(c : event) {c.setParent(this); subcalls = subcalls :+ c}
+  def setParent(p: event) {parent = p}
 }
 
 object TracingGUI extends SimpleSwingApplication {
   var box: BoxPanel = _
   var main = new event()
-  var events = main.subcalls
   var lastEvent = main
   
   def top = new MainFrame {
@@ -40,11 +39,14 @@ object TracingGUI extends SimpleSwingApplication {
         var newEvt = new event()
         newEvt.entry = prompt
         
+        main.addChild(newEvt)
+
         //set parent of new event
         lastEvent.ended match {
-          case true  => newEvt.parent = lastEvent.parent
-          case false => newEvt.parent = lastEvent
+          case true  => lastEvent.parent.addChild(newEvt)
+          case false => lastEvent.addChild(newEvt)
         }
+        
         lastEvent = newEvt
         
       case "exit" =>
@@ -54,14 +56,38 @@ object TracingGUI extends SimpleSwingApplication {
         lastEvent.exit = prompt
     }    
     
-    box.contents += new TextField{
+/*
+    box.contents += new TextArea{
       for (i <- 1 to getLength(lastEvent))
         text += "#"
-      text += prompt 
+      text += prompt
       editable = false
       }
 
     box.visible = false
     box.visible = true
-  } 
+*/
+  }
+  
+  def printAll() {
+    def printx(evt: event) {
+    box.contents += new TextArea{
+      for (i <- 1 to getLength(evt))
+        text += "#"
+      text += evt.entry + "\n"
+      for (i <- 1 to getLength(evt))
+        text += "#"
+      text += evt.exit
+      editable = false
+      }
+    
+    box.visible = false
+    box.visible = true
+
+    println(evt.subcalls.length)
+    evt.subcalls.map(x => printx(x))  
+    }
+    
+    printx(main)
+  }
 }
