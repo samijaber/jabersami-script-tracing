@@ -1,8 +1,8 @@
 package net.kogics.kojo.lite
 
 import swing._
-import com.sun.jdi.ThreadReference
-import com.sun.jdi.StackFrame
+import com.sun.jdi._
+import swing.event.MouseClicked
 
 class event {
   var ended = false
@@ -10,17 +10,28 @@ class event {
   var exit: String = _
   var subcalls = new Array[event](0)
   var parent: event = null
+  var entryVars = new Array[(LocalVariable, String)](0)
+  var allVars = new Array[(LocalVariable, String, String)](0)
   
   def isOver() {ended = true}
   def addChild(c : event) {c.setParent(this); subcalls = subcalls :+ c}
   def setParent(p: event) {parent = p}
+  def setEntryVars(stkfrm: StackFrame, localVars: List[LocalVariable]) {localVars.map(x => entryVars = entryVars :+ (x,stkfrm.getValue(x).toString))}
+  def setExitVars(stkfrm: StackFrame, localVars: List[LocalVariable]) {localVars.map(x => allVars = allVars :+ (x, findEntryVar(entryVars, x), stkfrm.getValue(x).toString))}
+  
+  def findEntryVar(ls : Array[(LocalVariable, String)], x : LocalVariable): String = { ls.head match {
+    case (x,a) => a
+    case _ => findEntryVar(ls.tail, x)
+  }}
 }
+
 
 object TracingGUI extends SimpleSwingApplication {
   var box: BoxPanel = _
   var main = new event()
   var lastEvent = main
   
+
   def top = new MainFrame {
     title = "Tracing Stack"
     box = new BoxPanel(Orientation.Vertical)
@@ -32,13 +43,12 @@ object TracingGUI extends SimpleSwingApplication {
     case _ => getLength(evt.parent) + 1 
   }
   
-  def addEvent(prompt: String, evt: String, isTurtle: Boolean) {
+  def addEvent(prompt: String, evt: String, isTurtle: Boolean, stkfrm: StackFrame, localVars: List[LocalVariable]) {
     evt match {
       case "entry" => 
         //create new event
         var newEvt = new event()
         newEvt.entry = prompt
-        
         main.addChild(newEvt)
 
         //set parent of new event
@@ -48,12 +58,14 @@ object TracingGUI extends SimpleSwingApplication {
         }
         
         lastEvent = newEvt
+        newEvt.setEntryVars(stkfrm, localVars)        
         
       case "exit" =>
         if (lastEvent.ended)
           {lastEvent = lastEvent.parent}  
         lastEvent.isOver()
         lastEvent.exit = prompt
+        lastEvent.setExitVars(stkfrm, localVars)
     }    
     
 /*
@@ -72,6 +84,11 @@ object TracingGUI extends SimpleSwingApplication {
   def printAll() {
     def printx(evt: event) {
     box.contents += new TextArea{
+      listenTo(mouse.clicks)
+      reactions += {
+      case e: MouseClicked => evt.allVars.foreach(x => println(x._1 + "\nEntry value: " + x._2 + "\nExit value: " + x._3 + "\n"))
+        }
+
       for (i <- 1 to getLength(evt))
         text += "#"
       text += evt.entry + "\n"
@@ -84,7 +101,7 @@ object TracingGUI extends SimpleSwingApplication {
     box.visible = false
     box.visible = true
 
-    println(evt.subcalls.length)
+    //println(evt.subcalls.length)
     evt.subcalls.map(x => printx(x))  
     }
     
