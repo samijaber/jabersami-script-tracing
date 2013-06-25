@@ -2,8 +2,7 @@ package net.kogics.kojo.lite
 
 import java.io.File
 
-import scala.collection.JavaConversions.asScalaBuffer
-import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.JavaConversions._
 import scala.reflect.internal.util.BatchSourceFile
 import scala.tools.nsc.Global
 import scala.tools.nsc.Settings
@@ -20,6 +19,8 @@ import com.sun.jdi.event.MethodEntryEvent
 import com.sun.jdi.event.MethodExitEvent
 import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.request.EventRequest
+import com.sun.jdi.AbsentInformationException
+import com.sun.jdi.LocalVariable
 
 import net.kogics.kojo.util.Utils
 
@@ -140,10 +141,12 @@ class Tracing {
                 methodEnterEvt.method().name match {
                   case "forward" | "right" | "clear" =>                 
                     var strng = s"Method Enter Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    creatorGUI.addEvent(strng, "entry", true)
+                    creatorGUI.addEvent(strng, "entry", true, mainThread.frame(0), methodEnterEvt.method().arguments().toList)
                   case _ =>
                     var strng = s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    creatorGUI.addEvent(strng, "entry", false)
+                    try {creatorGUI.addEvent(strng, "entry", false, mainThread.frame(0), methodEnterEvt.method().arguments().toList)}
+                    catch {case e: AbsentInformationException => 
+                      creatorGUI.addEvent(strng, "entry", false, mainThread.frame(0), List[LocalVariable]())}
                 }
               }
               catch {
@@ -154,10 +157,12 @@ class Tracing {
                 methodExitEvt.method().name match {
                   case "forward" | "right" | "clear" =>                 
                     var strng = s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    creatorGUI.addEvent(strng, "exit", true)
+                    creatorGUI.addEvent(strng, "exit", true, mainThread.frame(0), methodExitEvt.method().arguments().toList)
                   case _ =>
                     var strng = s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    creatorGUI.addEvent(strng, "exit", false)
+                    try {creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList)}
+                    catch {case e: AbsentInformationException => 
+                      creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), List[LocalVariable]())}
                }
             case vmDcEvt: VMDisconnectEvent =>
               println("VM Disconnected"); break
