@@ -12,6 +12,7 @@ class event {
   var parent: event = null
   var entryVars = new Array[(LocalVariable, String)](0)
   var allVars = new Array[(LocalVariable, String, String)](0)
+  var rtrnVal: String = _
   
   def isOver() {ended = true}
   def addChild(c : event) {c.setParent(this); subcalls = subcalls :+ c}
@@ -36,6 +37,10 @@ object TracingGUI extends SimpleSwingApplication {
     title = "Tracing Stack"
     box = new BoxPanel(Orientation.Vertical)
     contents = box
+  }
+  
+  def exitVal(str : String){
+    lastEvent.rtrnVal = str
   }
   
   def getLength(evt: event): Int = evt.parent match {
@@ -86,7 +91,8 @@ object TracingGUI extends SimpleSwingApplication {
     box.contents += new TextArea{
       listenTo(mouse.clicks)
       reactions += {
-      case e: MouseClicked => evt.allVars.foreach(x => println(x._1 + "\nEntry value: " + x._2 + "\nExit value: " + x._3 + "\n"))
+      case e: MouseClicked => evt.allVars.foreach(x => println(x._1 + "\n value at entry: " + x._2 + "\nvalue at exit: " + x._3 + "\n"))
+    		  				  println("Event return value:\n" + evt.rtrnVal + "\n\n")
         }
 
       for (i <- 1 to getLength(evt))

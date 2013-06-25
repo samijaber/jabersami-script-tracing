@@ -163,6 +163,7 @@ class Tracing {
                     try {creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList)}
                     catch {case e: AbsentInformationException => 
                       creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), List[LocalVariable]())}
+                      creatorGUI.exitVal(methodExitEvt.returnValue().toString())
                }
             case vmDcEvt: VMDisconnectEvent =>
               println("VM Disconnected"); break
