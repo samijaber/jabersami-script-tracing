@@ -12,17 +12,20 @@ class event {
   var parent: event = null
   var entryVars = new Array[(LocalVariable, String)](0)
   var allVars = new Array[(LocalVariable, String, String)](0)
+  var dclrdArgs = new Array[(LocalVariable, String)](0)
   var rtrnVal: String = _
   
   def isOver() {ended = true}
   def addChild(c : event) {c.setParent(this); subcalls = subcalls :+ c}
   def setParent(p: event) {parent = p}
   def setEntryVars(stkfrm: StackFrame, localVars: List[LocalVariable]) {localVars.map(x => entryVars = entryVars :+ (x,stkfrm.getValue(x).toString))}
-  def setExitVars(stkfrm: StackFrame, localVars: List[LocalVariable]) {localVars.map(x => allVars = allVars :+ (x, findEntryVar(entryVars, x), stkfrm.getValue(x).toString))}
+  def setExitVars(stkfrm: StackFrame, localVars: List[LocalVariable]) {localVars.map(x => allVars = allVars :+ (x, findVal(entryVars, x), stkfrm.getValue(x).toString))}
   
-  def findEntryVar(ls : Array[(LocalVariable, String)], x : LocalVariable): String = { ls.head match {
+  def setArgs(stkfrm: StackFrame, localArgs: List[LocalVariable]) {localArgs.map(x => dclrdArgs = dclrdArgs :+ (x,stkfrm.getValue(x).toString))}
+  	  
+  def findVal(ls : Array[(LocalVariable, String)], x : LocalVariable): String = { ls.head match {
     case (x,a) => a
-    case _ => findEntryVar(ls.tail, x)
+    case _ => findVal(ls.tail, x)
   }}
 }
 
@@ -31,7 +34,6 @@ object TracingGUI extends SimpleSwingApplication {
   var box: BoxPanel = _
   var main = new event()
   var lastEvent = main
-  
 
   def top = new MainFrame {
     title = "Tracing Stack"
@@ -48,22 +50,20 @@ object TracingGUI extends SimpleSwingApplication {
     case _ => getLength(evt.parent) + 1 
   }
   
-  def addEvent(prompt: String, evt: String, isTurtle: Boolean, stkfrm: StackFrame, localVars: List[LocalVariable]) {
+  def addEvent(prompt: String, evt: String, isTurtle: Boolean, stkfrm: StackFrame, localVars: List[LocalVariable], localArgs: List[LocalVariable]) {
     evt match {
       case "entry" => 
         //create new event
         var newEvt = new event()
         newEvt.entry = prompt
-        main.addChild(newEvt)
 
         //set parent of new event
         lastEvent.ended match {
           case true  => lastEvent.parent.addChild(newEvt)
-          case false => lastEvent.addChild(newEvt)
-        }
+          case false => lastEvent.addChild(newEvt)}
         
         lastEvent = newEvt
-        newEvt.setEntryVars(stkfrm, localVars)        
+        newEvt.setEntryVars(stkfrm, localVars)       
         
       case "exit" =>
         if (lastEvent.ended)
@@ -71,29 +71,22 @@ object TracingGUI extends SimpleSwingApplication {
         lastEvent.isOver()
         lastEvent.exit = prompt
         lastEvent.setExitVars(stkfrm, localVars)
+        lastEvent.setArgs(stkfrm, localArgs)
     }    
-    
-/*
-    box.contents += new TextArea{
-      for (i <- 1 to getLength(lastEvent))
-        text += "#"
-      text += prompt
-      editable = false
-      }
-
-    box.visible = false
-    box.visible = true
-*/
   }
+  
+  def setDclrdArgs(stkfrm: StackFrame, localArgs: List[LocalVariable]){
+    //lastEvent.setArgs(stkfrm, localArgs)
+}
   
   def printAll() {
     def printx(evt: event) {
     box.contents += new TextArea{
       listenTo(mouse.clicks)
       reactions += {
-      case e: MouseClicked => evt.allVars.foreach(x => println(x._1 + "\n value at entry: " + x._2 + "\nvalue at exit: " + x._3 + "\n"))
-    		  				  println("Event return value:\n" + evt.rtrnVal + "\n\n")
-        }
+      case e: MouseClicked => evt.allVars.foreach(x => println("Variable \"" + x._1 + "\"\nvalue at entry: " + x._2 + "\nvalue at exit: " + x._3 + "\n"))
+    		  				  evt.dclrdArgs.foreach(x => println("Variable \"" + x._1 + "\"\nvalue at entry: " + x._2 + "\n"))
+    		  				  println("Event return value:\n" + evt.rtrnVal + "\n\n")}
 
       for (i <- 1 to getLength(evt))
         text += "#"
