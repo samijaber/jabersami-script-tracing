@@ -141,12 +141,13 @@ class Tracing {
                 methodEnterEvt.method().name match {
                   case "forward" | "right" | "clear" =>                 
                     var strng = s"Method Enter Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    creatorGUI.addEvent(strng, "entry", true, mainThread.frame(0), methodEnterEvt.method().arguments().toList)
+                    creatorGUI.addEvent(strng, "entry", true, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)
                   case _ =>
                     var strng = s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    try {creatorGUI.addEvent(strng, "entry", false, mainThread.frame(0), methodEnterEvt.method().arguments().toList)}
-                    catch {case e: AbsentInformationException => 
-                      creatorGUI.addEvent(strng, "entry", false, mainThread.frame(0), List[LocalVariable]())}
+                    try {
+                      creatorGUI.addEvent(strng, "entry", false, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)}
+                    catch {
+                      case e: AbsentInformationException => creatorGUI.addEvent(strng, "entry", false, mainThread.frame(0), List[LocalVariable](), List[LocalVariable]())}
                 }
               }
               catch {
@@ -157,14 +158,18 @@ class Tracing {
                 methodExitEvt.method().name match {
                   case "forward" | "right" | "clear" =>                 
                     var strng = s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    creatorGUI.addEvent(strng, "exit", true, mainThread.frame(0), methodExitEvt.method().arguments().toList)
+                    creatorGUI.addEvent(strng, "exit", true, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
+                    creatorGUI.setDclrdArgs(mainThread.frame(1), methodExitEvt.method().variables().toList)
                   case _ =>
                     var strng = s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    try {creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList)}
-                    catch {case e: AbsentInformationException => 
-                      creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), List[LocalVariable]())}
-                      creatorGUI.exitVal(methodExitEvt.returnValue().toString())
-               }
+                    try {
+                      creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
+                      creatorGUI.setDclrdArgs(mainThread.frame(1), methodExitEvt.method().variables().toList)}
+                    catch {
+                      case e: AbsentInformationException => creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), List[LocalVariable](), List[LocalVariable]())
+                    		  								creatorGUI.setDclrdArgs(mainThread.frame(1), methodExitEvt.method().variables().toList)}
+                    }
+                creatorGUI.exitVal(methodExitEvt.returnValue().toString())
             case vmDcEvt: VMDisconnectEvent =>
               println("VM Disconnected"); break
             case _ => println("Other")
