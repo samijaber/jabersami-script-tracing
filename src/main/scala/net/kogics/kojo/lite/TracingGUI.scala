@@ -1,116 +1,64 @@
 package net.kogics.kojo.lite
 
-import swing._
-import javax.swing._
-import com.sun.jdi._
-import swing.event.MouseClicked
+import com.sun.jdi.LocalVariable
+import com.sun.jdi.StackFrame
+import scala.swing.MainFrame
+import javax.swing.JFrame
+import javax.swing.JList
+import javax.swing.JLabel
+import javax.swing.JPanel
+import java.awt.FlowLayout
+import javax.swing.BoxLayout
+import javax.swing.JTextArea
+import javax.swing.JScrollPane
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
+import java.awt.BorderLayout
 
-class event {
-  var ended = false
-  var entry: String = _
-  var exit: String = _
-  var subcalls = Vector[event]()
-  var parent: event = null
-  var entryArgs = Vector[(LocalVariable, String)]()
-  var allArgs = Vector[(LocalVariable, String, String)]()
-  var dclrdVars = Vector[(LocalVariable, String)]()
-  var rtrnVal: String = _
-  
-  def isOver() {ended = true}
-  def addChild(c : event) {c.setParent(this); subcalls = subcalls :+ c}
-  def setParent(p: event) {parent = p}
-  def setEntryArgs(stkfrm: StackFrame, localVars: List[LocalVariable]) {localVars.foreach(x => entryArgs = entryArgs :+ (x,stkfrm.getValue(x).toString))}
-  def setExitArgs(stkfrm: StackFrame, localVars: List[LocalVariable]) {localVars.foreach(x => allArgs = allArgs :+ (x, findVal(entryArgs, x), stkfrm.getValue(x).toString))}
-  
-  def setVars(stkfrm: StackFrame, localArgs: List[LocalVariable]) {localArgs.foreach(x => dclrdVars = dclrdVars :+ (x,stkfrm.getValue(x).toString))}
-  	  
-  def findVal(ls : Vector [(LocalVariable, String)], x : LocalVariable): String = { ls.head match {
-    case (x,a) => a
-    case _ => findVal(ls.tail, x)
-  }}
-}
+object TracingGUI {
+  lazy val frame = new JFrame
+  var events: JPanel = _
+  var eventDesc: JTextArea = _
 
-
-class TracingGUI extends Frame() {
-  import Frame._
-  var box :BoxPanel = _
-  var main: event = _
-  var lastEvent: event = _
-
-  title = "Tracing Stack"  
- 
-  override def closeOperation(){}
-  
-  def refresh(){
-    box = new BoxPanel(Orientation.Vertical)
-    contents = box
-    main = new event()
-    lastEvent = main
-  }
-  
-  def exitVal(str : String){
-    lastEvent.rtrnVal = str
-  }
-  
-  def getLength(evt: event): Int = evt.parent match {
-    case null => 0
-    case _ => getLength(evt.parent) + 1 
-  }
-  
-  def addEvent(prompt: String, evt: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], localVars: List[LocalVariable]) {
-    evt match {
-      case "entry" => 
-        //create new event
-        var newEvt = new event()
-        newEvt.entry = prompt
-
-        //set parent of new event
-        lastEvent.ended match {
-          case true  => lastEvent.parent.addChild(newEvt)
-          case false => lastEvent.addChild(newEvt)}
-        
-        lastEvent = newEvt
-        newEvt.setEntryArgs(stkfrm, localArgs)       
-        
-      case "exit" =>
-        if (lastEvent.ended)
-          {lastEvent = lastEvent.parent}  
-        lastEvent.isOver()
-        lastEvent.exit = prompt
-        lastEvent.setExitArgs(stkfrm, localArgs)
-        //lastEvent.setArgs(stkfrm, localArgs)
-    }    
-  }
-  
-  def setDclrdArgs(stkfrm: StackFrame, localArgs: List[LocalVariable]){
-    //lastEvent.setArgs(stkfrm, localArgs)
-}
-  
-  def printAll() {
-    def printx(evt: event) {
-    box.contents += new TextArea{
-      listenTo(mouse.clicks)
-      reactions += {
-      case e: MouseClicked => evt.allArgs.foreach(x => println("Variable \"" + x._1 + "\"\nvalue at entry: " + x._2 + "\nvalue at exit: " + x._3 + "\n"))
-    		  				  evt.dclrdVars.foreach(x => println("Variable \"" + x._1 + "\"\nvalue at entry: " + x._2 + "\n"))
-    		  				  println("Event return value:\n" + evt.rtrnVal + "\n\n")}
-
-      for (i <- 1 to getLength(evt))
-        text += "#"
-      text += evt.entry + "\n"
-      for (i <- 1 to getLength(evt))
-        text += "#"
-      text += evt.exit
-      editable = false
-      }
+  def reset() {
+    val eventHolder = new JPanel
+    eventHolder.setLayout(new BorderLayout)
+    eventHolder.add(new JLabel("<html><strong>Trace Events:</strong></html>"), BorderLayout.NORTH)
     
-    box.visible = false
-    box.visible = true
+    events = new JPanel()
+    events.setLayout(new BoxLayout(events, BoxLayout.Y_AXIS))
+    events.add(new JTextArea(" " * 120))
+    eventHolder.add(new JScrollPane(events), BorderLayout.WEST)
 
-    //println(evt.subcalls.length)
-    evt.subcalls.foreach(x => printx(x))  
+    eventDesc = new JTextArea("Click on an Event to see its details.")
+    eventDesc.setEditable(false)
+    eventHolder.add(eventDesc, BorderLayout.CENTER)
+    
+    
+    frame.getContentPane.removeAll()
+    frame.getContentPane.add(eventHolder)
+    frame.setBounds(100, 100, 1200, 400)
+    frame.setVisible(true)
+  }
+
+  def addEvent(me: MethodEvent) {
+    val te = if (me.ended) {
+      new JTextArea("< " * (me.level+1) + me.exit)
+    }
+    else {
+      new JTextArea("> " * (me.level+1) + me.entry)
     }
     
-    printx(main)
+    te.setEditable(false)
+    
+    val meDesc = me.toString
+    te.addMouseListener(new MouseAdapter {
+      override def mouseClicked(e: MouseEvent) {
+        eventDesc.setText(meDesc)
+      }
+    })
+
+    events.add(te)
+    events.revalidate()
   }
 }
