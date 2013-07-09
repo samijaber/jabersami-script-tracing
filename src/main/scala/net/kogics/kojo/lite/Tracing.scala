@@ -24,6 +24,10 @@ import com.sun.jdi.LocalVariable
 
 import net.kogics.kojo.util.Utils
 
+object Tracing {
+  val creatorGUI = new TracingGUI()
+}
+
 class Tracing {
 
   var evtSet: EventSet = _
@@ -33,7 +37,8 @@ class Tracing {
   val tmpdir = System.getProperty("java.io.tmpdir")
   val settings = makeSettings()
   val compiler = new Global(settings)
-
+  val creatorGUI = Tracing.creatorGUI
+	
   val wrapperCode = """object Wrapper { 
   def main(args: Array[String]) { 
     %s
@@ -115,9 +120,8 @@ class Tracing {
     val allThrds = vm.allThreads
     allThrds.foreach { x => if (x.name == "main") mainThread = x }
     
-    val creatorGUI = TracingGUI
-    val tracingFrame = creatorGUI.top
-    tracingFrame.visible = true
+    creatorGUI.refresh
+    creatorGUI.visible = true
     
     breakable {
       while (true) {
@@ -159,15 +163,16 @@ class Tracing {
                   case "forward" | "right" | "clear" =>                 
                     var strng = s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
                     creatorGUI.addEvent(strng, "exit", true, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
-                    creatorGUI.setDclrdArgs(mainThread.frame(1), methodExitEvt.method().variables().toList)
+                    creatorGUI.setDclrdArgs(mainThread.frame(0), methodExitEvt.method().variables().toList)
                   case _ =>
                     var strng = s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
                     try {
                       creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
-                      creatorGUI.setDclrdArgs(mainThread.frame(1), methodExitEvt.method().variables().toList)}
+                      creatorGUI.setDclrdArgs(mainThread.frame(0), methodExitEvt.method().variables().toList)}
                     catch {
                       case e: AbsentInformationException => creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), List[LocalVariable](), List[LocalVariable]())
-                    		  								creatorGUI.setDclrdArgs(mainThread.frame(1), methodExitEvt.method().variables().toList)}
+                    		  								//creatorGUI.setDclrdArgs(mainThread.frame(0), methodExitEvt.method().variables().toList)
+                      }
                     }
                 creatorGUI.exitVal(methodExitEvt.returnValue().toString())
             case vmDcEvt: VMDisconnectEvent =>
