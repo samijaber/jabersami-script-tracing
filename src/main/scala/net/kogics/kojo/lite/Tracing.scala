@@ -1,14 +1,12 @@
 package net.kogics.kojo.lite
 
 import java.io.File
-
 import scala.collection.JavaConversions._
 import scala.reflect.internal.util.BatchSourceFile
 import scala.tools.nsc.Global
 import scala.tools.nsc.Settings
 import scala.util.control.Breaks.break
 import scala.util.control.Breaks.breakable
-
 import com.sun.jdi.Bootstrap
 import com.sun.jdi.ThreadReference
 import com.sun.jdi.VirtualMachine
@@ -21,12 +19,8 @@ import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.request.EventRequest
 import com.sun.jdi.AbsentInformationException
 import com.sun.jdi.LocalVariable
-
 import net.kogics.kojo.util.Utils
-
-object Tracing {
-  val creatorGUI = new TracingGUI()
-}
+import com.sun.jdi.StackFrame
 
 class Tracing {
 
@@ -37,8 +31,7 @@ class Tracing {
   val tmpdir = System.getProperty("java.io.tmpdir")
   val settings = makeSettings()
   val compiler = new Global(settings)
-  val creatorGUI = Tracing.creatorGUI
-	
+
   val wrapperCode = """object Wrapper { 
   def main(args: Array[String]) { 
     %s
@@ -62,7 +55,7 @@ class Tracing {
     codeFile = new BatchSourceFile("scripteditor", code)
     val run = new compiler.Run
     run.compileSources(List(codeFile))
-    
+
   }
 
   def makeSettings() = {
@@ -102,7 +95,7 @@ class Tracing {
   }
 
   def trace(code: String) = Utils.runAsync {
- 
+
     val result = compile(code)
     //Connect to target VM
     val vm = getVM(initconn)
@@ -119,10 +112,9 @@ class Tracing {
     //Find main thread in target VM
     val allThrds = vm.allThreads
     allThrds.foreach { x => if (x.name == "main") mainThread = x }
-    
-    creatorGUI.refresh
-    creatorGUI.visible = true
-    
+
+    TracingGUI.reset
+
     breakable {
       while (true) {
         evtSet = evtQueue.remove()
@@ -133,48 +125,47 @@ class Tracing {
                 //Locate current stackframe, find get value of 'n' variable
                 val frame = mainThread.frame(0)
                 var toprint = "";
-                
-                if(methodEnterEvt.method().arguments().size > 0){
-                	var n = methodEnterEvt.method().arguments()(0)
-               		var argval = frame.getValue(n)
-                	var argname = n.name
-                	toprint = " (arg " + n.name + "): " + argval
-                 }
-                
+
+                if (methodEnterEvt.method().arguments().size > 0) {
+                  var n = methodEnterEvt.method().arguments()(0)
+                  var argval = frame.getValue(n)
+                  var argname = n.name
+                  toprint = " (arg " + n.name + "): " + argval
+                }
+
                 //determine if the method is a Turtle API method
                 methodEnterEvt.method().name match {
-                  case "forward" | "right" | "clear" =>                 
+                  case "forward" | "right" | "clear" =>
                     var strng = s"Method Enter Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    creatorGUI.addEvent(strng, "entry", true, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)
+                    handleMethodEvent(strng, "entry", true, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)
                   case _ =>
                     var strng = s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    try {
-                      creatorGUI.addEvent(strng, "entry", false, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)}
-                    catch {
-                      case e: AbsentInformationException => creatorGUI.addEvent(strng, "entry", false, mainThread.frame(0), List[LocalVariable](), List[LocalVariable]())}
+                    handleMethodEvent(strng, "entry", false, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)
                 }
               }
               catch {
-                case _: Throwable => println(s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}]  " + methodEnterEvt.method().name)
+                case t: Throwable =>
+                  println(s"[Exception] Method Enter Event [${methodEnterEvt.location().lineNumber - 2}]  " + methodEnterEvt.method().name)
+                //                  t.printStackTrace()
               }
-            case methodExitEvt: MethodExitEvent => 
-              //determine if the method is a Turtle API method
+            case methodExitEvt: MethodExitEvent =>
+              try {
+
+                //determine if the method is a Turtle API method
                 methodExitEvt.method().name match {
-                  case "forward" | "right" | "clear" =>                 
+                  case "forward" | "right" | "clear" =>
                     var strng = s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    creatorGUI.addEvent(strng, "exit", true, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
-                    creatorGUI.setDclrdArgs(mainThread.frame(0), methodExitEvt.method().variables().toList)
+                    handleMethodEvent(strng, "exit", true, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
                   case _ =>
                     var strng = s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    try {
-                      creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
-                      creatorGUI.setDclrdArgs(mainThread.frame(0), methodExitEvt.method().variables().toList)}
-                    catch {
-                      case e: AbsentInformationException => creatorGUI.addEvent(strng, "exit", false, mainThread.frame(0), List[LocalVariable](), List[LocalVariable]())
-                    		  								//creatorGUI.setDclrdArgs(mainThread.frame(0), methodExitEvt.method().variables().toList)
-                      }
-                    }
-                creatorGUI.exitVal(methodExitEvt.returnValue().toString())
+                    handleMethodEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
+                }
+              }
+              catch {
+                case t: Throwable =>
+                  println(s"[Exception] Method Exit Event [${methodExitEvt.location().lineNumber - 2}]  " + methodExitEvt.method().name)
+                //                  t.printStackTrace()
+              }
             case vmDcEvt: VMDisconnectEvent =>
               println("VM Disconnected"); break
             case _ => println("Other")
@@ -183,7 +174,49 @@ class Tracing {
         evtSet.resume()
       }
     }
-    creatorGUI.printAll()
+  }
+
+  def printFrameVarInfo(stkfrm: StackFrame) {
+    try {
+      println(s"Visible Vars: ${stkfrm.visibleVariables}")
+      println(s"Argument Values: ${stkfrm.getArgumentValues}")
+    }
+    catch {
+      case t: Throwable =>
+    }
+  }
+
+  var currentMethodEvent: Option[MethodEvent] = None
+  def handleMethodEvent(prompt: String, evt: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], localVars: List[LocalVariable]) {
+    evt match {
+      case "entry" =>
+        //create new MethodEvent
+        var newEvt = new MethodEvent()
+        newEvt.entry = prompt
+        newEvt.setEntryVars(stkfrm, localVars)
+
+        newEvt.setParent(currentMethodEvent)
+        currentMethodEvent = Some(newEvt)
+        //        println(">> Entry")
+        //        println(currentMethodEvent.get)
+        //        printFrameVarInfo(stkfrm)
+        //        println("<< Entry")
+        TracingGUI.addEvent(currentMethodEvent.get)
+
+      case "exit" =>
+        currentMethodEvent.foreach { ce =>
+          ce.isOver()
+          ce.exit = prompt
+          ce.setExitVars(stkfrm, localVars)
+          ce.setArgs(stkfrm, localArgs)
+          //          println(">> Exit")
+          //          println(ce)
+          //          printFrameVarInfo(stkfrm)
+          //          println("<< Exit")
+          TracingGUI.addEvent(currentMethodEvent.get)
+          currentMethodEvent = ce.parent
+        }
+    }
   }
 
   def createRequests(excludes: Array[String], vm: VirtualMachine) {
