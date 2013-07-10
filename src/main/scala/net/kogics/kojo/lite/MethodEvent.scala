@@ -10,14 +10,13 @@ class MethodEvent {
   var parent: Option[MethodEvent] = None
   var subcalls = Vector[MethodEvent]()
   var entryVars = Vector[(LocalVariable, String)]()
-  var allVars = Vector[(LocalVariable, String, String)]()
-  var dclrdArgs = Vector[(LocalVariable, String)]()
+  //  var allVars = Vector[(LocalVariable, String, String)]()
+  //  var dclrdArgs = Vector[(LocalVariable, String)]()
 
   override def toString() = s"""MethodEvent(
 entry: $entry
 exit: $exit
-entryVars: $entryVars
-allVars: $allVars
+entryVars: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.`type`} = ${vs._2}" }}
 ended: $ended
 )"""
 
@@ -42,30 +41,30 @@ ended: $ended
     }
   }
 
-  def setExitVars(stkfrm: StackFrame, localVars: List[LocalVariable]) {
-    localVars.foreach { x =>
-      val xVal = findVal(entryVars, x)
-      val xVal2 = try {
-        stkfrm.getValue(x).toString
-      }
-      catch {
-        case e: Throwable => "unavailable"
-      }
-      allVars = allVars :+ (x, xVal, xVal2)
-    }
-  }
-
-  def setArgs(stkfrm: StackFrame, localArgs: List[LocalVariable]) {
-    localArgs.foreach { x =>
-      val xVal = try {
-        stkfrm.getValue(x).toString
-      }
-      catch {
-        case e: Throwable => "unavailable"
-      }
-      dclrdArgs = dclrdArgs :+ (x, xVal)
-    }
-  }
+  //  def setExitVars(stkfrm: StackFrame, localVars: List[LocalVariable]) {
+  //    localVars.foreach { x =>
+  //      val xVal = findVal(entryVars, x)
+  //      val xVal2 = try {
+  //        stkfrm.getValue(x).toString
+  //      }
+  //      catch {
+  //        case e: Throwable => "unavailable"
+  //      }
+  //      allVars = allVars :+ (x, xVal, xVal2)
+  //    }
+  //  }
+  //
+  //  def setArgs(stkfrm: StackFrame, localArgs: List[LocalVariable]) {
+  //    localArgs.foreach { x =>
+  //      val xVal = try {
+  //        stkfrm.getValue(x).toString
+  //      }
+  //      catch {
+  //        case e: Throwable => "unavailable"
+  //      }
+  //      dclrdArgs = dclrdArgs :+ (x, xVal)
+  //    }
+  //  }
 
   def findVal(ls: Vector[(LocalVariable, String)], x: LocalVariable): String = {
     ls.head match {

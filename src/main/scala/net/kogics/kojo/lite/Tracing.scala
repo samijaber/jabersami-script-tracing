@@ -1,13 +1,18 @@
 package net.kogics.kojo.lite
 
 import java.io.File
-import scala.collection.JavaConversions._
+
+import scala.collection.JavaConversions.asScalaBuffer
+import scala.collection.JavaConversions.asScalaIterator
 import scala.reflect.internal.util.BatchSourceFile
 import scala.tools.nsc.Global
 import scala.tools.nsc.Settings
 import scala.util.control.Breaks.break
 import scala.util.control.Breaks.breakable
+
 import com.sun.jdi.Bootstrap
+import com.sun.jdi.LocalVariable
+import com.sun.jdi.StackFrame
 import com.sun.jdi.ThreadReference
 import com.sun.jdi.VirtualMachine
 import com.sun.jdi.connect.Connector
@@ -17,10 +22,8 @@ import com.sun.jdi.event.MethodEntryEvent
 import com.sun.jdi.event.MethodExitEvent
 import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.request.EventRequest
-import com.sun.jdi.AbsentInformationException
-import com.sun.jdi.LocalVariable
+
 import net.kogics.kojo.util.Utils
-import com.sun.jdi.StackFrame
 
 class Tracing {
 
@@ -94,6 +97,7 @@ class Tracing {
     vm
   }
 
+  val ignoreMethods = Set("main", "<init>", "<clinit>")
   def trace(code: String) = Utils.runAsync {
 
     val result = compile(code)
@@ -121,50 +125,54 @@ class Tracing {
         for (evt <- evtSet.eventIterator) {
           evt match {
             case methodEnterEvt: MethodEntryEvent =>
-              try {
-                //Locate current stackframe, find get value of 'n' variable
-                val frame = mainThread.frame(0)
-                var toprint = "";
+              if (!(ignoreMethods contains methodEnterEvt.method.name)) {
+                try {
+                  //Locate current stackframe, find get value of 'n' variable
+                  val frame = mainThread.frame(0)
 
-                if (methodEnterEvt.method().arguments().size > 0) {
-                  methodEnterEvt.method().arguments().foreach(n =>{
-                  var argval = frame.getValue(n)
-                  var argname = n.name
-                  toprint = toprint + " (arg " + n.name + "): " + argval + ","})
-                }
+                  val toprint =
+                    if (methodEnterEvt.method().arguments().size > 0)
+                      "(%s)" format methodEnterEvt.method.arguments.map { n =>
+                        val argval = frame.getValue(n)
+                        val argname = n.name
+                        s"arg ${n.name}: ${n.`type`} = $argval"
+                      }.mkString(",")
+                    else ""
 
-                //determine if the method is a Turtle API method
-                methodEnterEvt.method().name match {
-                  case "forward" | "right" | "clear" =>
-                    var strng = s"Method Enter Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    handleMethodEvent(strng, "entry", true, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)
-                  case _ =>
-                    var strng = s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
-                    handleMethodEvent(strng, "entry", false, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)
+                  //determine if the method is a Turtle API method
+                  methodEnterEvt.method().name match {
+                    case "forward" | "right" | "clear" =>
+                      var strng = s"Method Enter Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
+                      handleMethodEvent(strng, "entry", true, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)
+                    case _ =>
+                      var strng = s"Method Enter Event [${methodEnterEvt.location().lineNumber - 2}] ${methodEnterEvt.method().name}" + toprint
+                      handleMethodEvent(strng, "entry", false, mainThread.frame(0), methodEnterEvt.method().arguments().toList, methodEnterEvt.method().variables().toList)
+                  }
                 }
-              }
-              catch {
-                case t: Throwable =>
-                  println(s"[Exception] Method Enter Event [${methodEnterEvt.location().lineNumber - 2}]  " + methodEnterEvt.method().name)
-                //                  t.printStackTrace()
+                catch {
+                  case t: Throwable =>
+                    println(s"[Exception] Method Enter Event [${methodEnterEvt.location().lineNumber - 2}]  " + methodEnterEvt.method().name)
+                  //                  t.printStackTrace()
+                }
               }
             case methodExitEvt: MethodExitEvent =>
-              try {
-
-                //determine if the method is a Turtle API method
-                methodExitEvt.method().name match {
-                  case "forward" | "right" | "clear" =>
-                    var strng = s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    handleMethodEvent(strng, "exit", true, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
-                  case _ =>
-                    var strng = s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    handleMethodEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
+              if (!(ignoreMethods contains methodExitEvt.method.name)) {
+                try {
+                  //determine if the method is a Turtle API method
+                  methodExitEvt.method().name match {
+                    case "forward" | "right" | "clear" =>
+                      var strng = s"Method Exit Event [${mainThread.frame(1).location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                      handleMethodEvent(strng, "exit", true, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
+                    case _ =>
+                      var strng = s"Method Exit Event [${methodExitEvt.location().lineNumber - 2}] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                      handleMethodEvent(strng, "exit", false, mainThread.frame(0), methodExitEvt.method().arguments().toList, methodExitEvt.method().variables().toList)
+                  }
                 }
-              }
-              catch {
-                case t: Throwable =>
-                  println(s"[Exception] Method Exit Event [${methodExitEvt.location().lineNumber - 2}]  " + methodExitEvt.method().name)
-                //                  t.printStackTrace()
+                catch {
+                  case t: Throwable =>
+                    println(s"[Exception] Method Exit Event [${methodExitEvt.location().lineNumber - 2}]  " + methodExitEvt.method().name)
+                  //                  t.printStackTrace()
+                }
               }
             case vmDcEvt: VMDisconnectEvent =>
               println("VM Disconnected"); break
@@ -193,26 +201,16 @@ class Tracing {
         //create new MethodEvent
         var newEvt = new MethodEvent()
         newEvt.entry = prompt
-        newEvt.setEntryVars(stkfrm, localVars)
+        newEvt.setEntryVars(stkfrm, localArgs)
 
         newEvt.setParent(currentMethodEvent)
         currentMethodEvent = Some(newEvt)
-        //        println(">> Entry")
-        //        println(currentMethodEvent.get)
-        //        printFrameVarInfo(stkfrm)
-        //        println("<< Entry")
         TracingGUI.addEvent(currentMethodEvent.get)
 
       case "exit" =>
         currentMethodEvent.foreach { ce =>
           ce.isOver()
           ce.exit = prompt
-          ce.setExitVars(stkfrm, localVars)
-          ce.setArgs(stkfrm, localArgs)
-          //          println(">> Exit")
-          //          println(ce)
-          //          printFrameVarInfo(stkfrm)
-          //          println("<< Exit")
           TracingGUI.addEvent(currentMethodEvent.get)
           currentMethodEvent = ce.parent
         }
