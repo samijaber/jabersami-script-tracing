@@ -12,14 +12,12 @@ class MethodEvent {
   var entryVars = Vector[(LocalVariable, String)]()
   var allVars = Vector[(LocalVariable, String, String)]()
   var dclrdArgs = Vector[(LocalVariable, String)]()
-  var rtrnVal: String = _
 
   override def toString() = s"""MethodEvent(
 entry: $entry
 exit: $exit
 entryVars: $entryVars
 allVars: $allVars
-retVal: $rtrnVal
 ended: $ended
 )"""
 

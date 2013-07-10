@@ -127,10 +127,10 @@ class Tracing {
                 var toprint = "";
 
                 if (methodEnterEvt.method().arguments().size > 0) {
-                  var n = methodEnterEvt.method().arguments()(0)
+                  methodEnterEvt.method().arguments().foreach(n =>{
                   var argval = frame.getValue(n)
                   var argname = n.name
-                  toprint = " (arg " + n.name + "): " + argval
+                  toprint = toprint + " (arg " + n.name + "): " + argval + ","})
                 }
 
                 //determine if the method is a Turtle API method
