@@ -5,8 +5,10 @@ import java.io.File
 import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.JavaConversions.asScalaIterator
 import scala.reflect.internal.util.BatchSourceFile
+import scala.reflect.internal.util.Position
 import scala.tools.nsc.Global
 import scala.tools.nsc.Settings
+import scala.tools.nsc.reporters.Reporter
 import scala.util.control.Breaks.break
 import scala.util.control.Breaks.breakable
 
@@ -27,12 +29,18 @@ import net.kogics.kojo.util.Utils
 
 class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
-  var initconn: LaunchingConnector = _
   var mainThread: ThreadReference = _
-  var codeFile: BatchSourceFile = _
   val tmpdir = System.getProperty("java.io.tmpdir")
   val settings = makeSettings()
-  val compiler = new Global(settings)
+
+  val reporter = new Reporter {
+    override def info0(position: Position, msg: String, severity: Severity, force: Boolean) {
+      severity.count += 1
+      println(msg)
+    }
+  }
+
+  val compiler = new Global(settings, reporter)
   val tracingGUI = new TracingGUI(scriptEditor)
 
   val wrapperCode = """object Wrapper { 
@@ -56,10 +64,13 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
 
   def compile(code0: String) = {
     val code = wrapperCode format code0
-    codeFile = new BatchSourceFile("scripteditor", code)
+    val codeFile = new BatchSourceFile("scripteditor", code)
     val run = new compiler.Run
+    reporter.reset
     run.compileSources(List(codeFile))
-
+    if (reporter.hasErrors) {
+      throw new RuntimeException("Trace Compilation Error. Ensure that your program compiles correctly before trying to trace it.")
+    }
   }
 
   def makeSettings() = {
@@ -69,9 +80,8 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
     iSettings
   }
 
-  def getVM(initconn: LaunchingConnector) = {
-    var connector = initconn
-
+  def launchVM() = {
+    var connector: LaunchingConnector = null
     val conns = Bootstrap.virtualMachineManager().allConnectors();
     breakable {
       for (conn <- conns) {
@@ -100,117 +110,119 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
 
   val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat")
   val turtleMethods = Set("forward", "right", "clear")
+
   def trace(code: String) = Utils.runAsync {
+    try {
+      compile(code)
+      //Connect to target VM
+      val vm = launchVM()
+      println("Attached to process '" + vm.name + "'")
 
-    val result = compile(code)
-    //Connect to target VM
-    val vm = getVM(initconn)
-    println("Attached to process '" + vm.name + "'")
+      //Create Event Requests
+      val excludes = Array("java.*", "javax.*", "sun.*", "com.sun.*", "com.apple.*")
+      createRequests(excludes, vm);
 
-    //Create Event Requests
-    val excludes = Array("java.*", "javax.*", "sun.*", "com.sun.*", "com.apple.*")
-    createRequests(excludes, vm);
+      //Iterate through Events
+      val evtQueue = vm.eventQueue
+      vm.resume
 
-    //Iterate through Events
-    val evtQueue = vm.eventQueue
-    vm.resume
+      //Find main thread in target VM
+      val allThrds = vm.allThreads
+      allThrds.foreach { x => if (x.name == "main") mainThread = x }
 
-    //Find main thread in target VM
-    val allThrds = vm.allThreads
-    allThrds.foreach { x => if (x.name == "main") mainThread = x }
+      tracingGUI.reset
 
-    tracingGUI.reset
+      breakable {
+        while (true) {
+          evtSet = evtQueue.remove()
+          for (evt <- evtSet.eventIterator) {
+            evt match {
 
-    breakable {
-      while (true) {
-        evtSet = evtQueue.remove()
-        for (evt <- evtSet.eventIterator) {
-          evt match {
-            case methodEnterEvt: MethodEntryEvent =>
-              if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
-                try {
-                  val frame = mainThread.frame(0)
-                  val toprint =
-                    if (methodEnterEvt.method().arguments().size > 0)
-                      "(%s)" format methodEnterEvt.method.arguments.map { n =>
-                        val argval = frame.getValue(n)
-                        val argname = n.name
-                        s"arg ${n.name}: ${n.`type`} = $argval"
-                      }.mkString(",")
-                    else ""
+              case methodEnterEvt: MethodEntryEvent =>
+                if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
+                  try {
+                    val frame = mainThread.frame(0)
+                    val toprint =
+                      if (methodEnterEvt.method().arguments().size > 0)
+                        "(%s)" format methodEnterEvt.method.arguments.map { n =>
+                          val argval = frame.getValue(n)
 
-                  //determine if the method is a Turtle API method
-                  if (turtleMethods contains methodEnterEvt.method.name) {
-                    val desc = s"[Method Enter] ${methodEnterEvt.method.name}" + toprint
-                    handleMethodEntry(
-                      methodEnterEvt.method.name,
-                      desc,
-                      true,
-                      mainThread.frame(0),
-                      methodEnterEvt.method.arguments.toList,
-                      mainThread.frame(1).location().lineNumber - 2,
-                      mainThread.frame(1).location().sourceName)
+                          s"arg ${n.name}: ${n.`type`.name} = $argval"
+                        }.mkString(",")
+                      else ""
+
+                    //determine if the method is a Turtle API method
+                    if (turtleMethods contains methodEnterEvt.method.name) {
+                      val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
+                      handleMethodEntry(
+                        methodEnterEvt.method.name,
+                        desc,
+                        true,
+                        mainThread.frame(0),
+                        methodEnterEvt.method.arguments.toList,
+                        mainThread.frame(1).location().lineNumber - 2,
+                        mainThread.frame(1).location().sourceName)
+                    }
+                    else {
+                      val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
+                      handleMethodEntry(
+                        methodEnterEvt.method.name,
+                        desc,
+                        false,
+                        mainThread.frame(0),
+                        methodEnterEvt.method.arguments.toList,
+                        methodEnterEvt.location.lineNumber - 2,
+                        methodEnterEvt.location.sourceName)
+                    }
                   }
-                  else {
-                    val desc = s"[Method Enter] ${methodEnterEvt.method.name}" + toprint
-                    handleMethodEntry(
-                      methodEnterEvt.method.name,
-                      desc,
-                      false,
-                      mainThread.frame(0),
-                      methodEnterEvt.method.arguments.toList,
-                      methodEnterEvt.location.lineNumber - 2,
-                      methodEnterEvt.location.sourceName)
-                  }
-                }
-                catch {
-                  case t: Throwable =>
-                    println(s"[Exception] [Method Enter] ${methodEnterEvt.method.name} -- ${t.getMessage}")
-                }
-              }
-            case methodExitEvt: MethodExitEvent =>
-              if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
-                try {
-                  //determine if the method is a Turtle API method
-                  if (turtleMethods contains methodExitEvt.method.name) {
-                    val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    handleMethodExit(
-                      desc,
-                      true,
-                      mainThread.frame(0),
-                      mainThread.frame(1).location.lineNumber - 2,
-                      methodExitEvt.returnValue.toString,
-                      mainThread.frame(1).location.sourceName)
-                  }
-                  else {
-                    val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                    handleMethodExit(
-                      desc,
-                      false,
-                      mainThread.frame(0),
-                      methodExitEvt.location.lineNumber - 2,
-                      methodExitEvt.returnValue.toString,
-                      methodExitEvt.location.sourceName
-                    )
+                  catch {
+                    case t: Throwable =>
+                      println(s"[Exception] [Method Enter] ${methodEnterEvt.method.name} -- ${t.getMessage}")
                   }
                 }
-                catch {
-                  case t: Throwable =>
-                    println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
+
+              case methodExitEvt: MethodExitEvent =>
+                if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
+                  try {
+                    //determine if the method is a Turtle API method
+                    if (turtleMethods contains methodExitEvt.method.name) {
+                      val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                      handleMethodExit(
+                        desc,
+                        true,
+                        mainThread.frame(0),
+                        mainThread.frame(1).location.lineNumber - 2,
+                        methodExitEvt.returnValue.toString,
+                        mainThread.frame(1).location.sourceName)
+                    }
+                    else {
+                      val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                      handleMethodExit(
+                        desc,
+                        false,
+                        mainThread.frame(0),
+                        methodExitEvt.location.lineNumber - 2,
+                        methodExitEvt.returnValue.toString,
+                        methodExitEvt.location.sourceName
+                      )
+                    }
+                  }
+                  catch {
+                    case t: Throwable =>
+                      println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
+                  }
                 }
-              }
-            case vmDcEvt: VMDisconnectEvent =>
-              println("VM Disconnected"); break
-            case _ => println("Other")
+              case vmDcEvt: VMDisconnectEvent =>
+                println("VM Disconnected"); break
+              case _ => println("Other")
+            }
           }
-        }
-        try {
           evtSet.resume()
         }
-        catch {
-          case t: Throwable => println(s"[Exception] Resume Event Set -- ${t.getMessage}")
-        }
       }
+    }
+    catch {
+      case t: Throwable => System.err.println(s"[Exception] -- ${t.getMessage}")
     }
   }
 
@@ -233,9 +245,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
     newEvt.setParent(currentMethodEvent)
     newEvt.sourceName = source
     currentMethodEvent = Some(newEvt)
-    if (source == "scripteditor") {
-      tracingGUI.addEvent(currentMethodEvent.get)
-    }
+    tracingGUI.addEvent(currentMethodEvent.get, source)
     if (isTurtle) {
       runTurtleMethod(name, stkfrm, localArgs)
     }
@@ -268,8 +278,8 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
       ce.exit = desc
       ce.exitLineNum = lineNum
       ce.returnVal = retVal
-      if (!isTurtle && source == "scripteditor") {
-        tracingGUI.addEvent(currentMethodEvent.get)
+      if (!isTurtle) {
+        tracingGUI.addEvent(currentMethodEvent.get, source)
       }
       currentMethodEvent = ce.parent
     }
