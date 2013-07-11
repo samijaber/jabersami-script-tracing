@@ -10,13 +10,19 @@ class MethodEvent {
   var parent: Option[MethodEvent] = None
   var subcalls = Vector[MethodEvent]()
   var entryVars = Vector[(LocalVariable, String)]()
+  var returnVal: String = _
+  var entryLineNum: Int = _
+  var exitLineNum: Int = _
   //  var allVars = Vector[(LocalVariable, String, String)]()
   //  var dclrdArgs = Vector[(LocalVariable, String)]()
 
   override def toString() = s"""MethodEvent(
-entry: $entry
-exit: $exit
-entryVars: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.`type`} = ${vs._2}" }}
+Entry: $entry
+Exit: $exit
+Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.`type`} = ${vs._2}" }}
+Return value: $returnVal
+Entry Line Number: $entryLineNum
+Exit Line Number: $exitLineNum
 ended: $ended
 )"""
 
