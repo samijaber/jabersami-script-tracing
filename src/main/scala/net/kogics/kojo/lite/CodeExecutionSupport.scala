@@ -560,7 +560,7 @@ class CodeExecutionSupport(
     code.indexOf("#worksheet") != -1
   }
 
-  lazy val tracer = new Tracing(scriptEditor)
+  lazy val tracer = new Tracing(scriptEditor, builtins)
   def traceScript() {
     val code2run = codeToRun
     tracer.trace(code2run.code)
