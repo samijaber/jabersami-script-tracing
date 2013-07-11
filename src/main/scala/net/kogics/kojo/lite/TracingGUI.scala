@@ -34,28 +34,33 @@ class TracingGUI(scriptEditor: ScriptEditor) {
     frame.setVisible(true)
   }
 
-  def addEvent(me: MethodEvent) = {
+  def addEvent(me: MethodEvent, source: String) = {
     val meDesc = me.toString
     val ended = me.ended
     val uiLevel = me.level + 1
     val taText = if (me.ended) "< " * uiLevel + me.exit else "> " * uiLevel + me.entry
     val lineNum = if (me.ended) me.exitLineNum else me.entryLineNum
 
-    Utils.runInSwingThread {
-      val te = new JTextArea(taText)
-      te.setEditable(false)
-      te.setLineWrap(true)
-      te.setWrapStyleWord(true)
+    if (source == "scripteditor") {
+      Utils.runInSwingThread {
+        val te = new JTextArea(taText)
+        te.setEditable(false)
+        te.setLineWrap(true)
+        te.setWrapStyleWord(true)
 
-      te.addMouseListener(new MouseAdapter {
-        override def mouseClicked(e: MouseEvent) {
-          eventDesc.setText(meDesc)
-          scriptEditor.markTraceLine(lineNum)
-        }
-      })
+        te.addMouseListener(new MouseAdapter {
+          override def mouseClicked(e: MouseEvent) {
+            eventDesc.setText(meDesc)
+            scriptEditor.markTraceLine(lineNum)
+          }
+        })
 
-      events.add(te)
-      events.revalidate()
+        events.add(te)
+        events.revalidate()
+      }
     }
+    //    else {
+    //      println(taText)
+    //    }
   }
 }

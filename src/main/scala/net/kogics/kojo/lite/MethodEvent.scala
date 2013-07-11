@@ -20,7 +20,7 @@ class MethodEvent {
   override def toString() = s"""MethodEvent(
 Entry: $entry
 Exit: $exit
-Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.`type`} = ${vs._2}" }}
+Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.`type`.name} = ${vs._2}" }}
 Return value: $returnVal
 Entry Line Number: $entryLineNum
 Exit Line Number: $exitLineNum
