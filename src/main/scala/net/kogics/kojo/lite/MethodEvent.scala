@@ -13,6 +13,7 @@ class MethodEvent {
   var returnVal: String = _
   var entryLineNum: Int = _
   var exitLineNum: Int = _
+  var sourceName: String = _
   //  var allVars = Vector[(LocalVariable, String, String)]()
   //  var dclrdArgs = Vector[(LocalVariable, String)]()
 
@@ -23,6 +24,7 @@ Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.`type`} = ${vs.
 Return value: $returnVal
 Entry Line Number: $entryLineNum
 Exit Line Number: $exitLineNum
+Source: $sourceName
 ended: $ended
 )"""
 

@@ -1,15 +1,16 @@
 package net.kogics.kojo.lite
 
-import java.awt.BorderLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 
 import javax.swing.BoxLayout
 import javax.swing.JFrame
-import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JScrollPane
+import javax.swing.JSplitPane
 import javax.swing.JTextArea
+
+import net.kogics.kojo.util.Utils
 
 class TracingGUI(scriptEditor: ScriptEditor) {
   lazy val frame = new JFrame
@@ -17,18 +18,15 @@ class TracingGUI(scriptEditor: ScriptEditor) {
   var eventDesc: JTextArea = _
 
   def reset() {
-    val eventHolder = new JPanel
-    eventHolder.setLayout(new BorderLayout)
-    eventHolder.add(new JLabel("<html><strong>Trace Events:</strong></html>"), BorderLayout.NORTH)
-
     events = new JPanel()
     events.setLayout(new BoxLayout(events, BoxLayout.Y_AXIS))
-    events.add(new JTextArea(" " * 120))
-    eventHolder.add(new JScrollPane(events), BorderLayout.WEST)
 
     eventDesc = new JTextArea("Click on an Event to see its details.")
     eventDesc.setEditable(false)
-    eventHolder.add(eventDesc, BorderLayout.CENTER)
+
+    val eventHolder = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(events), new JScrollPane(eventDesc))
+    eventHolder.setDividerLocation(500)
+    eventHolder.setOneTouchExpandable(true)
 
     frame.getContentPane.removeAll()
     frame.getContentPane.add(eventHolder)
@@ -36,31 +34,28 @@ class TracingGUI(scriptEditor: ScriptEditor) {
     frame.setVisible(true)
   }
 
-  def addEvent(me: MethodEvent) {
-    val te = if (me.ended) {
-      new JTextArea("< " * (me.level + 1) + me.exit)
-    }
-    else {
-      new JTextArea("> " * (me.level + 1) + me.entry)
-    }
-
-    te.setEditable(false)
-
+  def addEvent(me: MethodEvent) = {
     val meDesc = me.toString
     val ended = me.ended
-    te.addMouseListener(new MouseAdapter {
-      override def mouseClicked(e: MouseEvent) {
-        eventDesc.setText(meDesc)
-        if (ended) {
-          scriptEditor.markTraceLine(me.exitLineNum)
-        }
-        else {
-          scriptEditor.markTraceLine(me.entryLineNum)
-        }
-      }
-    })
+    val uiLevel = me.level + 1
+    val taText = if (me.ended) "< " * uiLevel + me.exit else "> " * uiLevel + me.entry
+    val lineNum = if (me.ended) me.exitLineNum else me.entryLineNum
 
-    events.add(te)
-    events.revalidate()
+    Utils.runInSwingThread {
+      val te = new JTextArea(taText)
+      te.setEditable(false)
+      te.setLineWrap(true)
+      te.setWrapStyleWord(true)
+
+      te.addMouseListener(new MouseAdapter {
+        override def mouseClicked(e: MouseEvent) {
+          eventDesc.setText(meDesc)
+          scriptEditor.markTraceLine(lineNum)
+        }
+      })
+
+      events.add(te)
+      events.revalidate()
+    }
   }
 }
