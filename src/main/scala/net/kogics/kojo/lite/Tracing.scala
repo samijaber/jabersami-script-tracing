@@ -25,8 +25,7 @@ import com.sun.jdi.request.EventRequest
 
 import net.kogics.kojo.util.Utils
 
-class Tracing(scriptEditor: ScriptEditor) {
-
+class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
   var initconn: LaunchingConnector = _
   var mainThread: ThreadReference = _
@@ -43,6 +42,7 @@ class Tracing(scriptEditor: ScriptEditor) {
     
   def clear() {}
   def forward(n: Double) {}
+  def right() {}
   def right(n: Double) {}
   def repeat(n: Int) (fn: => Unit) {
     var i = 0
@@ -98,7 +98,8 @@ class Tracing(scriptEditor: ScriptEditor) {
     vm
   }
 
-  val ignoreMethods = Set("main", "<init>", "<clinit>")
+  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat")
+  val turtleMethods = Set("forward", "right", "clear")
   def trace(code: String) = Utils.runAsync {
 
     val result = compile(code)
@@ -126,7 +127,7 @@ class Tracing(scriptEditor: ScriptEditor) {
         for (evt <- evtSet.eventIterator) {
           evt match {
             case methodEnterEvt: MethodEntryEvent =>
-              if (!(ignoreMethods contains methodEnterEvt.method.name)) {
+              if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
                 try {
                   val frame = mainThread.frame(0)
                   val toprint =
@@ -139,13 +140,13 @@ class Tracing(scriptEditor: ScriptEditor) {
                     else ""
 
                   //determine if the method is a Turtle API method
-                  methodEnterEvt.method().name match {
-                    case "forward" | "right" | "clear" =>
-                      var strng = s"[Method Enter] ${methodEnterEvt.method().name}" + toprint
-                      handleMethodEntry(strng, true, mainThread.frame(0), methodEnterEvt.method.arguments.toList, mainThread.frame(1).location().lineNumber - 2)
-                    case _ =>
-                      var strng = s"[Method Enter] ${methodEnterEvt.method().name}" + toprint
-                      handleMethodEntry(strng, false, mainThread.frame(0), methodEnterEvt.method.arguments.toList, methodEnterEvt.location.lineNumber - 2)
+                  if (turtleMethods contains methodEnterEvt.method.name) {
+                    val desc = s"[Method Enter] ${methodEnterEvt.method.name}" + toprint
+                    handleMethodEntry(methodEnterEvt.method.name, desc, true, mainThread.frame(0), methodEnterEvt.method.arguments.toList, mainThread.frame(1).location().lineNumber - 2)
+                  }
+                  else {
+                    val desc = s"[Method Enter] ${methodEnterEvt.method.name}" + toprint
+                    handleMethodEntry(methodEnterEvt.method.name, desc, false, mainThread.frame(0), methodEnterEvt.method.arguments.toList, methodEnterEvt.location.lineNumber - 2)
                   }
                 }
                 catch {
@@ -154,16 +155,16 @@ class Tracing(scriptEditor: ScriptEditor) {
                 }
               }
             case methodExitEvt: MethodExitEvent =>
-              if (!(ignoreMethods contains methodExitEvt.method.name)) {
+              if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
                 try {
                   //determine if the method is a Turtle API method
-                  methodExitEvt.method().name match {
-                    case "forward" | "right" | "clear" =>
-                      var strng = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                      handleMethodExit(strng, true, mainThread.frame(0), mainThread.frame(1).location.lineNumber - 2, methodExitEvt.returnValue.toString)
-                    case _ =>
-                      var strng = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                      handleMethodExit(strng, false, mainThread.frame(0), methodExitEvt.location.lineNumber - 2, methodExitEvt.returnValue.toString)
+                  if (turtleMethods contains methodExitEvt.method.name) {
+                    var strng = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                    handleMethodExit(strng, true, mainThread.frame(0), mainThread.frame(1).location.lineNumber - 2, methodExitEvt.returnValue.toString)
+                  }
+                  else {
+                    var strng = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                    handleMethodExit(strng, false, mainThread.frame(0), methodExitEvt.location.lineNumber - 2, methodExitEvt.returnValue.toString)
                   }
                 }
                 catch {
@@ -192,7 +193,7 @@ class Tracing(scriptEditor: ScriptEditor) {
   }
 
   var currentMethodEvent: Option[MethodEvent] = None
-  def handleMethodEntry(desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int) {
+  def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int) {
     var newEvt = new MethodEvent()
     newEvt.entry = desc
     newEvt.entryLineNum = lineNum
@@ -200,6 +201,30 @@ class Tracing(scriptEditor: ScriptEditor) {
     newEvt.setParent(currentMethodEvent)
     currentMethodEvent = Some(newEvt)
     tracingGUI.addEvent(currentMethodEvent.get)
+    if (isTurtle) {
+      runTurtleMethod(name, stkfrm, localArgs)
+    }
+  }
+
+  def runTurtleMethod(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable]) {
+    import builtins.Tw
+    import builtins.TSCanvas
+    name match {
+      case "clear" =>
+        TSCanvas.clear()
+      case "forward" =>
+        val step = stkfrm.getValue(localArgs(0)).toString.toDouble
+        Tw.forward(step)
+      case "right" =>
+        if (localArgs.length == 0) {
+          Tw.right()
+        }
+        else {
+          val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
+          Tw.right(angle)
+        }
+      case _ =>
+    }
   }
 
   def handleMethodExit(desc: String, isTurtle: Boolean, stkfrm: StackFrame, lineNum: Int, retVal: String) {
@@ -208,7 +233,9 @@ class Tracing(scriptEditor: ScriptEditor) {
       ce.exit = desc
       ce.exitLineNum = lineNum
       ce.returnVal = retVal
-      tracingGUI.addEvent(currentMethodEvent.get)
+      if (!isTurtle) {
+        tracingGUI.addEvent(currentMethodEvent.get)
+      }
       currentMethodEvent = ce.parent
     }
   }
