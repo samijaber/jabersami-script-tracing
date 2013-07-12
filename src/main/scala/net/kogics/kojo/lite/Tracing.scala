@@ -46,18 +46,18 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
 
   val compiler = new Global(settings, reporter)
   val tracingGUI = new TracingGUI(scriptEditor)
+  val lineNumOffset = 5
 
-  val wrapperCode = """
-    import java.awt.Paint
-    import java.awt.Color
-    
-    object Wrapper { 
-    
+  val wrapperCode = """import java.awt.Paint
+import java.awt.Color
+import java.awt.Color.blue    
+object Wrapper { 
   def main(args: Array[String]) { 
     %s
   }
   
-   /* movement */
+
+  /* movement */
   def clear() {}
   def forward(n: Double) {}
   def right() {}
@@ -128,7 +128,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
     vm
   }
 
-  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$")
+  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat")
   val turtleMethods = Set("forward", "right", "clear", "back", "setPenColor")
 
   def trace(code: String) = Utils.runAsync {
@@ -180,7 +180,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
                         true,
                         mainThread.frame(0),
                         methodEnterEvt.method.arguments.toList,
-                        mainThread.frame(1).location().lineNumber - 2,
+                        mainThread.frame(1).location().lineNumber - lineNumOffset,
                         mainThread.frame(1).location().sourceName)
                     }
                     else {
@@ -191,7 +191,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
                         false,
                         mainThread.frame(0),
                         methodEnterEvt.method.arguments.toList,
-                        methodEnterEvt.location.lineNumber - 2,
+                        methodEnterEvt.location.lineNumber - lineNumOffset,
                         methodEnterEvt.location.sourceName)
                     }
                   }
@@ -211,7 +211,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
                         desc,
                         true,
                         mainThread.frame(0),
-                        mainThread.frame(1).location.lineNumber - 2,
+                        mainThread.frame(1).location.lineNumber - lineNumOffset,
                         methodExitEvt.returnValue.toString,
                         mainThread.frame(1).location.sourceName)
                     }
@@ -221,7 +221,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
                         desc,
                         false,
                         mainThread.frame(0),
-                        methodExitEvt.location.lineNumber - 2,
+                        methodExitEvt.location.lineNumber - lineNumOffset,
                         methodExitEvt.returnValue.toString,
                         methodExitEvt.location.sourceName
                       )
@@ -312,7 +312,11 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
         Tw.setPosition(x, y)
       case "setPenColor" =>
         val name = stkfrm.getValue(localArgs(0)).toString
-        val color: java.awt.Paint = Color.getColor(name)
+        // this does not work, because name is something like "instance of java.awt.Color(id=142)"
+        // we need to invoke toString *in the target VM* on stkfrm.getValue(localArgs(0)) to get the actual Color value as a string
+        // The following JDI invokeMethod call will probably need to be used:
+        // http://docs.oracle.com/javase/6/docs/jdk/api/jpda/jdi/com/sun/jdi/ObjectReference.html#invokeMethod%28com.sun.jdi.ThreadReference,%20com.sun.jdi.Method,%20java.util.List,%20int%29
+        val color = Color.getColor(name)
         Tw.setPenColor(color)
       case _ =>
     }
