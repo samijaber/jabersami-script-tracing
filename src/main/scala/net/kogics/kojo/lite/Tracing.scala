@@ -25,7 +25,11 @@ import com.sun.jdi.event.MethodExitEvent
 import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.request.EventRequest
 
+import java.awt.Paint
+import java.awt.Color
+
 import net.kogics.kojo.util.Utils
+import net.kogics.kojo.core.CodeRunner
 
 class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
@@ -43,15 +47,31 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   val compiler = new Global(settings, reporter)
   val tracingGUI = new TracingGUI(scriptEditor)
 
-  val wrapperCode = """object Wrapper { 
+  val wrapperCode = """
+    import java.awt.Paint
+    import java.awt.Color
+    
+    object Wrapper { 
+    
   def main(args: Array[String]) { 
     %s
   }
-    
+  
+   /* movement */
   def clear() {}
   def forward(n: Double) {}
   def right() {}
   def right(n: Double) {}
+  def left() {}
+  def left(n: Double) {}
+  def back() {}
+  def back(n: Double) {}
+  def home() {}
+  def jumpTo(x: Double, y: Double) {}
+  def moveTo(x: Double, y: Double) {}
+  def setPosition(x: Double, y: Double) {}
+  def setPenColor(color: Paint) {}
+  
   def repeat(n: Int) (fn: => Unit) {
     var i = 0
     while(i < n) {
@@ -108,8 +128,8 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
     vm
   }
 
-  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat")
-  val turtleMethods = Set("forward", "right", "clear")
+  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$")
+  val turtleMethods = Set("forward", "right", "clear", "back", "setPenColor")
 
   def trace(code: String) = Utils.runAsync {
     try {
@@ -255,6 +275,17 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
     import builtins.Tw
     import builtins.TSCanvas
     name match {
+        /*
+      case "right" | "left"=>
+        val method = Tw.getClass().getMethod(name)
+        if (localArgs.length == 0) {
+          method.invoke(Tw.getClass().newInstance())
+        }
+        else {
+          val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
+          method.invoke(Tw.getClass().newInstance(), angle: java.lang.Double)
+        }
+        */
       case "clear" =>
         TSCanvas.clear()
       case "forward" =>
@@ -268,6 +299,21 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
           val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
           Tw.right(angle)
         }
+      case "back" =>
+      	val step = stkfrm.getValue(localArgs(0)).toString.toDouble
+        Tw.back(step)
+      case "home" =>
+        Tw.home
+      case "jumpTo" => 
+        val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
+        Tw.jumpTo(x, y)
+      case "setPosition" =>
+        val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
+        Tw.setPosition(x, y)
+      case "setPenColor" =>
+        val name = stkfrm.getValue(localArgs(0)).toString
+        val color: java.awt.Paint = Color.getColor(name)
+        Tw.setPenColor(color)
       case _ =>
     }
   }

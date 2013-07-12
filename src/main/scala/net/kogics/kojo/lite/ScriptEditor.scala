@@ -401,7 +401,6 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
           else {
             execSupport.compileCode()
           }
-
         case TraceScript =>
           execSupport.traceScript()
           codePane.requestFocusInWindow()
