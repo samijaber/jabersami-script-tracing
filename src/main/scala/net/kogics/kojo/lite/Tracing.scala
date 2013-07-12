@@ -46,38 +46,12 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
 
   val compiler = new Global(settings, reporter)
   val tracingGUI = new TracingGUI(scriptEditor)
-  val lineNumOffset = 5
+  val lineNumOffset = 3
 
-  val wrapperCode = """import java.awt.Paint
-import java.awt.Color
-import java.awt.Color.blue    
-object Wrapper { 
+  val wrapperCode = """object Wrapper {
+import net.kogics.kojo.lite.TracingBuiltins._
   def main(args: Array[String]) { 
     %s
-  }
-  
-
-  /* movement */
-  def clear() {}
-  def forward(n: Double) {}
-  def right() {}
-  def right(n: Double) {}
-  def left() {}
-  def left(n: Double) {}
-  def back() {}
-  def back(n: Double) {}
-  def home() {}
-  def jumpTo(x: Double, y: Double) {}
-  def moveTo(x: Double, y: Double) {}
-  def setPosition(x: Double, y: Double) {}
-  def setPenColor(color: Paint) {}
-  
-  def repeat(n: Int) (fn: => Unit) {
-    var i = 0
-    while(i < n) {
-      fn
-      i += 1
-    }
   }
 } 
 """
@@ -116,7 +90,7 @@ object Wrapper {
     val connArgs = connector.defaultArguments();
     val mArgs = connArgs.get("main").asInstanceOf[Connector.Argument]
     val opts = connArgs.get("options").asInstanceOf[Connector.Argument]
-    var optionValue = s"-classpath $tmpdir${File.pathSeparator}/tmp/scala-library.jar"
+    var optionValue = s"""-classpath "$tmpdir${File.pathSeparator}${System.getProperty("java.class.path")}" """
 
     if (mArgs == null)
       throw new Error("Bad launching connector");
