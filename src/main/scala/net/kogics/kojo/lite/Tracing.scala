@@ -24,9 +24,12 @@ import com.sun.jdi.event.MethodEntryEvent
 import com.sun.jdi.event.MethodExitEvent
 import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.request.EventRequest
-
+import com.sun.jdi.ClassType
+import com.sun.jdi.ObjectReference
+import com.sun.jdi.StringReference
 import java.awt.Paint
 import java.awt.Color
+import scala.util.matching.Regex
 
 import net.kogics.kojo.util.Utils
 import net.kogics.kojo.core.CodeRunner
@@ -50,12 +53,16 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
 
   val wrapperCode = """object Wrapper {
 import net.kogics.kojo.lite.TracingBuiltins._
-  def main(args: Array[String]) { 
+def main(args: Array[String]) { 
     %s
   }
 } 
 """
 
+  def stop(){
+    mainThread.virtualMachine().exit(0)
+  } 
+    
   def compile(code0: String) = {
     val code = wrapperCode format code0
     val codeFile = new BatchSourceFile("scripteditor", code)
@@ -103,7 +110,7 @@ import net.kogics.kojo.lite.TracingBuiltins._
   }
 
   val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat")
-  val turtleMethods = Set("forward", "right", "clear", "back", "setPenColor")
+  val turtleMethods = Set("forward", "right", "left", "clear", "back", "setPenColor", "setFillColor", "setAnimationDelay", "penDown", "penUp")
 
   def trace(code: String) = Utils.runAsync {
     try {
@@ -273,6 +280,14 @@ import net.kogics.kojo.lite.TracingBuiltins._
           val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
           Tw.right(angle)
         }
+      case "left" =>
+        if (localArgs.length == 0) {
+          Tw.left()
+        }
+        else {
+          val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
+          Tw.left(angle)
+        }
       case "back" =>
       	val step = stkfrm.getValue(localArgs(0)).toString.toDouble
         Tw.back(step)
@@ -285,13 +300,34 @@ import net.kogics.kojo.lite.TracingBuiltins._
         val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
         Tw.setPosition(x, y)
       case "setPenColor" =>
-        val name = stkfrm.getValue(localArgs(0)).toString
-        // this does not work, because name is something like "instance of java.awt.Color(id=142)"
-        // we need to invoke toString *in the target VM* on stkfrm.getValue(localArgs(0)) to get the actual Color value as a string
-        // The following JDI invokeMethod call will probably need to be used:
-        // http://docs.oracle.com/javase/6/docs/jdk/api/jpda/jdi/com/sun/jdi/ObjectReference.html#invokeMethod%28com.sun.jdi.ThreadReference,%20com.sun.jdi.Method,%20java.util.List,%20int%29
-        val color = Color.getColor(name)
+        val colorVal = stkfrm.getValue(localArgs(0)).asInstanceOf[ObjectReference]
+        val mthd = colorVal.referenceType.methodsByName("toString")(0)
+        val rtrndValue = colorVal.invokeMethod(mainThread, mthd, new java.util.ArrayList, ObjectReference.INVOKE_SINGLE_THREADED)
+        var str = rtrndValue.asInstanceOf[StringReference].value()
+        val pattern = new Regex("\\d{1,3}")
+        var rgb = Vector[Int]()
+        val colors = (pattern findAllIn str).foreach(c => rgb = rgb :+ c.toInt)
+        val color = new Color(rgb(0),rgb(1),rgb(2))
+        //println(s"Returned color string: $str")
+        //println(s"Returned color raw string: ${rtrndValue.toString}")
         Tw.setPenColor(color)
+      case "setFillColor" =>
+        val colorVal = stkfrm.getValue(localArgs(0)).asInstanceOf[ObjectReference]
+        val mthd = colorVal.referenceType.methodsByName("toString")(0)
+        val rtrndValue = colorVal.invokeMethod(mainThread, mthd, new java.util.ArrayList, ObjectReference.INVOKE_SINGLE_THREADED)
+        var str = rtrndValue.asInstanceOf[StringReference].value()
+        val pattern = new Regex("\\d{1,3}")
+        var rgb = Vector[Int]()
+        val colors = (pattern findAllIn str).foreach(c => rgb = rgb :+ c.toInt)
+        val color = new Color(rgb(0),rgb(1),rgb(2))
+        Tw.setFillColor(color)
+      case "setAnimationDelay" =>
+        val step = stkfrm.getValue(localArgs(0)).toString.toLong
+        Tw.setAnimationDelay(step)
+      case "PenUp" => 
+        Tw.penUp
+      case "PenDown" =>
+        Tw.penDown
       case _ =>
     }
   }
