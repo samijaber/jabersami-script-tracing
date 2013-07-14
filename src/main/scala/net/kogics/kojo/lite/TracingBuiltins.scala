@@ -4,6 +4,9 @@ package lite
 import java.awt.Paint
 import java.awt.{ Color => JColor }
 import java.awt.{ Font => JFont }
+import net.kogics.kojo.core._
+import net.kogics.kojo.picture._
+import net.kogics.kojo.util.Utils
 
 object TracingBuiltins {
   
@@ -48,6 +51,14 @@ object TracingBuiltins {
 //  val Background = new Tw.Background
 //  val Sound = new Tw.Sound
   
+  val hueMod = Utils.hueMod _
+  val satMod = Utils.satMod _
+  val britMod = Utils.britMod _
+  
+  def color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
+  def Color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
+  def Color(R: Int, B: Int, G: Int, a:Int): Color = new Color(R,B,G,a)
+  
   /* movement */
   def clear() {}
   def forward(n: Double) {}
@@ -62,7 +73,10 @@ object TracingBuiltins {
   def moveTo(x: Double, y: Double) {}
   def setPosition(x: Double, y: Double) {}
   def setPenColor(color: Paint) {}
-  
+  def setFillColor(color: Paint){}
+  def setAnimationDelay(d: Long){}
+  def penDown(){}
+  def penUp(){}
   def repeat(n: Int) (fn: => Unit) {
     var i = 0
     while(i < n) {

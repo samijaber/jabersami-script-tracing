@@ -565,7 +565,9 @@ class CodeExecutionSupport(
     val code2run = codeToRun
     tracer.trace(code2run.code)
   }
-
+  def stopTraceScript(){
+    tracer.stop()
+  }
   def compileRunCode() {
     val code2run = codeToRun
     preProcessCode(code2run.code)

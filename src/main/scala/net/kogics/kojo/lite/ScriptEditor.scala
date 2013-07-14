@@ -71,7 +71,7 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
   val codePane = new RSyntaxTextArea(5, 80)
   val statusStrip = new StatusStrip()
   val (toolbar, runButton, runWorksheetButton, compileButton, stopButton, hNextButton, hPrevButton,
-    clearSButton, clearButton, cexButton) = makeToolbar()
+    clearSButton, clearButton, cexButton, traceButton, stopTraceButton) = makeToolbar()
 
   toolbar.setOpaque(true)
   toolbar.setBackground(new Color(230, 230, 230))
@@ -377,7 +377,8 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
     val ClearOutput = "ClearOutput"
     val UploadCommand = "UploadCommand"
     val TraceScript = "TraceScript"
-
+    val StopTraceScript = "StopTraceScript"
+      
     val actionListener = new ActionListener {
       def actionPerformed(e: ActionEvent) = e.getActionCommand match {
         case RunScript =>
@@ -403,6 +404,9 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
           }
         case TraceScript =>
           execSupport.traceScript()
+          codePane.requestFocusInWindow()
+        case StopTraceScript =>
+          execSupport.stopTraceScript()
           codePane.requestFocusInWindow()
         case StopScript =>
           execSupport.stopScript()
@@ -447,6 +451,7 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
     val clearButton = makeNavigationButton("/images/clear24.png", ClearOutput, Utils.loadString("S_ClearOutput"))
     val cexButton = makeNavigationButton("/images/upload.png", UploadCommand, Utils.loadString("S_Upload"))
     val traceButton = makeNavigationButton("/images/run24.png", TraceScript, Utils.loadString("S_RunScript"))
+    val stopTraceButton = makeNavigationButton("/images/stop24.png", StopTraceScript, Utils.loadString("S_StopScript"))
 
     toolbar.add(runButton)
     toolbar.add(runWorksheetButton)
@@ -472,8 +477,9 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
     toolbar.add(clearButton)
 
     toolbar.add(traceButton)
-
-    (toolbar, runButton, runWorksheetButton, compileButton, stopButton, hNextButton, hPrevButton, clearSButton, clearButton, cexButton)
+    toolbar.add(stopTraceButton)
+    
+    (toolbar, runButton, runWorksheetButton, compileButton, stopButton, hNextButton, hPrevButton, clearSButton, clearButton, cexButton, traceButton, stopTraceButton)
   }
 
   def addCodePaneListeners() {
