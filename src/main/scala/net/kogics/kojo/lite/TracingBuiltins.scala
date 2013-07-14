@@ -7,7 +7,7 @@ import java.awt.{ Font => JFont }
 import net.kogics.kojo.core._
 import net.kogics.kojo.picture._
 import net.kogics.kojo.util.Utils
-
+ 
 object TracingBuiltins {
   
   type Turtle = core.Turtle
@@ -61,6 +61,8 @@ object TracingBuiltins {
   
   /* movement */
   def clear() {}
+  def cleari(){}
+  def invisible(){}
   def forward(n: Double) {}
   def right() {}
   def right(n: Double) {}
@@ -75,6 +77,7 @@ object TracingBuiltins {
   def setPenColor(color: Paint) {}
   def setFillColor(color: Paint){}
   def setAnimationDelay(d: Long){}
+  def setPenThickness(d: Double){}
   def penDown(){}
   def penUp(){}
   def repeat(n: Int) (fn: => Unit) {
@@ -84,4 +87,8 @@ object TracingBuiltins {
       i += 1
     }
   }
+  def circle(r: Double){}
+  def newTurtle(x: Double, y: Double): Turtle = {null}
+  def runInBackground(code: => Unit) = Utils.runAsyncMonitored(code)
+
 }
