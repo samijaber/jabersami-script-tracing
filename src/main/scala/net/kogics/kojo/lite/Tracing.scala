@@ -1,7 +1,6 @@
 package net.kogics.kojo.lite
 
 import java.io.File
-
 import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.JavaConversions.asScalaIterator
 import scala.reflect.internal.util.BatchSourceFile
@@ -11,7 +10,6 @@ import scala.tools.nsc.Settings
 import scala.tools.nsc.reporters.Reporter
 import scala.util.control.Breaks.break
 import scala.util.control.Breaks.breakable
-
 import com.sun.jdi.Bootstrap
 import com.sun.jdi.LocalVariable
 import com.sun.jdi.StackFrame
@@ -30,9 +28,7 @@ import com.sun.jdi.StringReference
 import java.awt.Paint
 import java.awt.Color
 import scala.util.matching.Regex
-
 import net.kogics.kojo.util.Utils
-import net.kogics.kojo.core.CodeRunner
 
 class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
@@ -110,7 +106,7 @@ def main(args: Array[String]) {
   }
 
   val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat")
-  val turtleMethods = Set("forward", "right", "left", "clear", "back", "setPenColor", "setFillColor", "setAnimationDelay", "penDown", "penUp")
+  val turtleMethods = Set("forward", "right", "left", "clear", "cleari", "invisible", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "newTurtle")
 
   def trace(code: String) = Utils.runAsync {
     try {
@@ -269,6 +265,10 @@ def main(args: Array[String]) {
         */
       case "clear" =>
         TSCanvas.clear()
+      case "cleari" =>
+		TSCanvas.cleari()
+      case "invisible" =>
+        Tw.invisible
       case "forward" =>
         val step = stkfrm.getValue(localArgs(0)).toString.toDouble
         Tw.forward(step)
@@ -324,10 +324,19 @@ def main(args: Array[String]) {
       case "setAnimationDelay" =>
         val step = stkfrm.getValue(localArgs(0)).toString.toLong
         Tw.setAnimationDelay(step)
-      case "PenUp" => 
+      case "setPenThickness" =>
+        val thickness = stkfrm.getValue(localArgs(0)).toString.toDouble
+        Tw.setPenThickness(thickness)
+      case "penUp" => 
         Tw.penUp
-      case "PenDown" =>
+      case "penDown" =>
         Tw.penDown
+      case "circle" =>
+        val r = stkfrm.getValue(localArgs(0)).toString.toDouble
+        Tw.circle(r)
+      case "newTurtle" =>
+        val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
+        TSCanvas.newTurtle(x, y, "/images/turtle32.png")
       case _ =>
     }
   }
