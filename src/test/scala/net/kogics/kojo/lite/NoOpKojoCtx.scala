@@ -11,6 +11,8 @@ import net.kogics.kojo.core.NoopSpriteListener
 import net.kogics.kojo.core.SpriteListener
 import net.kogics.kojo.util.Utils
 
+import bibliothek.gui.dock.common.DefaultSingleCDockable
+
 class NoOpKojoCtx extends core.KojoCtx {
   Utils.kojoCtx = this
   def activityListener = NoopSpriteListener
@@ -30,6 +32,7 @@ class NoOpKojoCtx extends core.KojoCtx {
   def makeMathWorldVisible() {}
   def makeStoryTellerVisible() {}
   def make3DCanvasVisible() {}
+  def makeTraceWindowVisible(tw: DefaultSingleCDockable) {}
   def baseDir: String = System.getProperty("user.dir")
   def stopScript(): Unit = {}
   def stopInterpreter() {}

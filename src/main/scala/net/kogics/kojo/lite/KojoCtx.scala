@@ -37,6 +37,8 @@ import net.kogics.kojo.util.Utils
 
 import bibliothek.gui.dock.common.CControl
 import bibliothek.gui.dock.common.CGrid
+import bibliothek.gui.dock.common.CLocation
+import bibliothek.gui.dock.common.DefaultSingleCDockable
 import bibliothek.gui.dock.common.mode.ExtendedMode
 
 class KojoCtx(val subKojo: Boolean) extends core.KojoCtx {
@@ -226,6 +228,17 @@ class KojoCtx(val subKojo: Boolean) extends core.KojoCtx {
     if (!topcs.d3h.isShowing) {
       topcs.d3h.toFront()
       activateScriptEditor()
+    }
+  }
+
+  def makeTraceWindowVisible(tw: DefaultSingleCDockable) = Utils.runInSwingThread {
+    if (!tw.isShowing) {
+      control.addDockable(tw)
+      tw.setLocation(CLocation.base.normalWest(0.3))
+      tw.setVisible(true)
+    }
+    else {
+      tw.toFront()
     }
   }
 
