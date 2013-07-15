@@ -21,6 +21,8 @@ import javax.swing.Action
 import javax.swing.JCheckBoxMenuItem
 import javax.swing.JFrame
 
+import bibliothek.gui.dock.common.DefaultSingleCDockable
+
 trait KojoCtx {
   def activityListener: SpriteListener
   def setActivityListener(l: SpriteListener): Unit
@@ -39,6 +41,7 @@ trait KojoCtx {
   def makeMathWorldVisible(): Unit
   def makeStoryTellerVisible(): Unit
   def make3DCanvasVisible(): Unit
+  def makeTraceWindowVisible(tw: DefaultSingleCDockable): Unit
   def baseDir: String
   def stopScript(): Unit
   def stopInterpreter(): Unit
