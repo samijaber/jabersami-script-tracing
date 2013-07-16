@@ -7,8 +7,13 @@ import java.awt.{ Font => JFont }
 import net.kogics.kojo.core._
 import net.kogics.kojo.picture._
 import net.kogics.kojo.util.Utils
- 
+import lite.canvas.SpriteCanvas
+import net.kogics.kojo.turtle.Turtle
+
 object TracingBuiltins {
+  
+  val kojoCtx = new NoOpKojoCtx
+  val spriteCanvas = new SpriteCanvas(kojoCtx)
   
   type Turtle = core.Turtle
   type Color = java.awt.Color
@@ -55,6 +60,8 @@ object TracingBuiltins {
   val satMod = Utils.satMod _
   val britMod = Utils.britMod _
   
+  var turtles = Vector[Turtle]()
+  
   def color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
   def Color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
   def Color(R: Int, B: Int, G: Int, a:Int): Color = new Color(R,B,G,a)
@@ -88,7 +95,12 @@ object TracingBuiltins {
     }
   }
   def circle(r: Double){}
-  def newTurtle(x: Double, y: Double): Turtle = {null}
+  
+  def newTurtle(x: Double, y: Double): Turtle = {
+    var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, "/images/turtle32.png", x, y) 
+    turtles = turtles :+ t0
+    turtles.last
+    }
+  
   def runInBackground(code: => Unit) = Utils.runAsyncMonitored(code)
-
 }

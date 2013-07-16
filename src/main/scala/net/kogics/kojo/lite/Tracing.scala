@@ -44,13 +44,16 @@ import java.awt.Paint
 import java.awt.Color
 import scala.util.matching.Regex
 import net.kogics.kojo.util.Utils
+import net.kogics.kojo.core.Turtle
 
 class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
   var mainThread: ThreadReference = _
   val tmpdir = System.getProperty("java.io.tmpdir")
   val settings = makeSettings()
-
+  var turtles = Vector[Turtle]()
+  var turtlesRefs = Vector[Long]()
+  
   val reporter = new Reporter {
     override def info0(position: Position, msg: String, severity: Severity, force: Boolean) {
       severity.count += 1
@@ -124,7 +127,11 @@ def main(args: Array[String]) {
   val turtleMethods = Set("forward", "right", "left", "clear", "cleari", "invisible", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "newTurtle")
 
   def trace(code: String) = Utils.runAsync {
+    
     try {
+      turtles = Vector[Turtle]()
+      turtlesRefs = Vector[Long]()
+      
       compile(code)
       //Connect to target VM
       val vm = launchVM()
@@ -196,6 +203,15 @@ def main(args: Array[String]) {
               case methodExitEvt: MethodExitEvent =>
                 if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
                   try {
+                    
+                    //Vectors to keep track of new turtlesRefs
+                    if (methodExitEvt.method.name == "newTurtle" && isFromWrapper(mainThread.frame(0)))
+                    {
+                      var ref = methodExitEvt.returnValue().asInstanceOf[ObjectReference].uniqueID()
+                      println("@$*#$#$#$#$#$# Adding ID: " + ref)
+                      turtlesRefs = turtlesRefs :+ ref
+                    }
+                    
                     //determine if the method is a Turtle API method
                     if (turtleMethods contains methodExitEvt.method.name) {
                       val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
@@ -221,7 +237,7 @@ def main(args: Array[String]) {
                   }
                   catch {
                     case t: Throwable =>
-                      println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
+                     println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
                   }
                 }
               case vmDcEvt: VMDisconnectEvent =>
@@ -263,9 +279,26 @@ def main(args: Array[String]) {
     }
   }
 
+  def isFromWrapper(stkfrm: StackFrame): Boolean = {stkfrm.thisObject().toString().contains("TracingBuiltins")}
+  
   def runTurtleMethod(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable]) {
+    var stdTurtle = isFromWrapper(stkfrm)
     import builtins.Tw
     import builtins.TSCanvas
+    var turtle: Turtle = Tw.getTurtle
+    
+    if (!stdTurtle) {
+      var caller = stkfrm.thisObject().uniqueID()
+      /*
+      println("@#@#@#: " + caller)
+      println("@#@#@#: " + turtlesRefs)
+      */
+      var index = turtlesRefs.indexOf(caller)
+      
+      turtle = turtles(index)
+    }
+      
+    
     name match {
         /*
       case "right" | "left"=>
@@ -283,37 +316,37 @@ def main(args: Array[String]) {
       case "cleari" =>
 		TSCanvas.cleari()
       case "invisible" =>
-        Tw.invisible
+        turtle.invisible
       case "forward" =>
         val step = stkfrm.getValue(localArgs(0)).toString.toDouble
-        Tw.forward(step)
+        turtle.forward(step)
       case "right" =>
         if (localArgs.length == 0) {
-          Tw.right()
+          turtle.right()
         }
         else {
           val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
-          Tw.right(angle)
+          turtle.right(angle)
         }
       case "left" =>
         if (localArgs.length == 0) {
-          Tw.left()
+          turtle.left()
         }
         else {
           val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
-          Tw.left(angle)
+          turtle.left(angle)
         }
       case "back" =>
       	val step = stkfrm.getValue(localArgs(0)).toString.toDouble
-        Tw.back(step)
+        turtle.back(step)
       case "home" =>
-        Tw.home
+        turtle.home
       case "jumpTo" => 
         val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
-        Tw.jumpTo(x, y)
+        turtle.jumpTo(x, y)
       case "setPosition" =>
         val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
-        Tw.setPosition(x, y)
+        turtle.setPosition(x, y)
       case "setPenColor" =>
         val colorVal = stkfrm.getValue(localArgs(0)).asInstanceOf[ObjectReference]
         val mthd = colorVal.referenceType.methodsByName("toString")(0)
@@ -325,7 +358,7 @@ def main(args: Array[String]) {
         val color = new Color(rgb(0),rgb(1),rgb(2))
         //println(s"Returned color string: $str")
         //println(s"Returned color raw string: ${rtrndValue.toString}")
-        Tw.setPenColor(color)
+        turtle.setPenColor(color)
       case "setFillColor" =>
         val colorVal = stkfrm.getValue(localArgs(0)).asInstanceOf[ObjectReference]
         val mthd = colorVal.referenceType.methodsByName("toString")(0)
@@ -335,26 +368,27 @@ def main(args: Array[String]) {
         var rgb = Vector[Int]()
         val colors = (pattern findAllIn str).foreach(c => rgb = rgb :+ c.toInt)
         val color = new Color(rgb(0),rgb(1),rgb(2))
-        Tw.setFillColor(color)
+        turtle.setFillColor(color)
       case "setAnimationDelay" =>
         val step = stkfrm.getValue(localArgs(0)).toString.toLong
-        Tw.setAnimationDelay(step)
+        turtle.setAnimationDelay(step)
       case "setPenThickness" =>
         val thickness = stkfrm.getValue(localArgs(0)).toString.toDouble
-        Tw.setPenThickness(thickness)
+        turtle.setPenThickness(thickness)
       case "penUp" => 
-        Tw.penUp
+        turtle.penUp
       case "penDown" =>
-        Tw.penDown
+        turtle.penDown
       case "circle" =>
         val r = stkfrm.getValue(localArgs(0)).toString.toDouble
-        Tw.circle(r)
+        turtle.circle(r)
       case "newTurtle" =>
         val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
-        TSCanvas.newTurtle(x, y, "/images/turtle32.png")
+        turtles = turtles :+ TSCanvas.newTurtle(x, y, "/images/turtle32.png")
       case _ =>
     }
   }
+  
 
   def handleMethodExit(desc: String, isTurtle: Boolean, stkfrm: StackFrame, lineNum: Int, retVal: String, source: String) {
     currentMethodEvent.foreach { ce =>
