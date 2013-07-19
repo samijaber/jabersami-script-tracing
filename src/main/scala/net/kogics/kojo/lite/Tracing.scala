@@ -36,6 +36,7 @@ import com.sun.jdi.event.EventSet
 import com.sun.jdi.event.MethodEntryEvent
 import com.sun.jdi.event.MethodExitEvent
 import com.sun.jdi.event.VMDisconnectEvent
+import com.sun.jdi.event.ThreadStartEvent
 import com.sun.jdi.request.EventRequest
 import com.sun.jdi.ClassType
 import com.sun.jdi.ObjectReference
@@ -53,6 +54,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   val settings = makeSettings()
   var turtles = Vector[Turtle]()
   var turtlesRefs = Vector[Long]()
+  var runningInBG = false
   
   val reporter = new Reporter {
     override def info0(position: Position, msg: String, severity: Severity, force: Boolean) {
@@ -123,9 +125,16 @@ def main(args: Array[String]) {
     vm
   }
 
-  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat")
+  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat", "runInBackground")
   val turtleMethods = Set("forward", "right", "left", "clear", "cleari", "invisible", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "newTurtle")
-
+  
+  def getThread(vm: VirtualMachine, name: String) {
+      //Find main thread in target VM
+      val allThrds = vm.allThreads
+      allThrds.foreach { x => if (x.name == name) mainThread = x }
+  }
+  
+  
   def trace(code: String) = Utils.runAsync {
     
     try {
@@ -139,25 +148,30 @@ def main(args: Array[String]) {
 
       //Create Event Requests
       val excludes = Array("java.*", "javax.*", "sun.*", "com.sun.*", "com.apple.*")
+      getThread(vm, "main")
       createRequests(excludes, vm);
+      WatchThreadStarts
 
       //Iterate through Events
       val evtQueue = vm.eventQueue
       vm.resume
-
-      //Find main thread in target VM
-      val allThrds = vm.allThreads
-      allThrds.foreach { x => if (x.name == "main") mainThread = x }
-
+      
+      
       tracingGUI.reset
-
+      
       breakable {
         while (true) {
           evtSet = evtQueue.remove()
-          for (evt <- evtSet.eventIterator) {
-            evt match {
-
+          for (evt <- evtSet.eventIterator) {    
+        	  evt match {
+        	  case threadStartEvt: ThreadStartEvent =>
+        	    var name = threadStartEvt.thread().name
+        	      println("@#@#@#@#@: " + name)
+        	      if (name.contains("Thread-"))
+        	        addThreadReqs(threadStartEvt.thread())
               case methodEnterEvt: MethodEntryEvent =>
+                mainThread = methodEnterEvt.thread()
+                
                 if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
                   try {
                     val frame = mainThread.frame(0)
@@ -196,19 +210,20 @@ def main(args: Array[String]) {
                   }
                   catch {
                     case t: Throwable =>
-                      println(s"[Exception] [Method Enter] ${methodEnterEvt.method.name} -- ${t.getMessage}")
+                      println(s"${methodEnterEvt.thread().name()} [Exception] [Method Enter] ${methodEnterEvt.method.name} -- ${t.getMessage}")
                   }
                 }
 
               case methodExitEvt: MethodExitEvent =>
                 if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
                   try {
+                	mainThread = methodExitEvt.thread()
                     
                     //Vectors to keep track of new turtlesRefs
                     if (methodExitEvt.method.name == "newTurtle" && isFromWrapper(mainThread.frame(0)))
                     {
                       var ref = methodExitEvt.returnValue().asInstanceOf[ObjectReference].uniqueID()
-                      println("@$*#$#$#$#$#$# Adding ID: " + ref)
+                      //println("@$*#$#$#$#$#$# Adding ID: " + ref)
                       turtlesRefs = turtlesRefs :+ ref
                     }
                     
@@ -237,7 +252,7 @@ def main(args: Array[String]) {
                   }
                   catch {
                     case t: Throwable =>
-                     println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
+                     //println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
                   }
                 }
               case vmDcEvt: VMDisconnectEvent =>
@@ -250,7 +265,7 @@ def main(args: Array[String]) {
       }
     }
     catch {
-      case t: Throwable => System.err.println(s"[Exception] -- ${t.getMessage}")
+      case t: Throwable => //System.err.println(s"[Exception] -- ${t.getMessage}")
     }
   }
 
@@ -320,6 +335,8 @@ def main(args: Array[String]) {
       case "forward" =>
         val step = stkfrm.getValue(localArgs(0)).toString.toDouble
         turtle.forward(step)
+        println("@#@#@#@# YOUR THREAD IS " + mainThread.name())
+        runningInBG = true
       case "right" =>
         if (localArgs.length == 0) {
           turtle.right()
@@ -385,6 +402,8 @@ def main(args: Array[String]) {
       case "newTurtle" =>
         val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
         turtles = turtles :+ TSCanvas.newTurtle(x, y, "/images/turtle32.png")
+      case "runInBackground" =>
+        runningInBG = true
       case _ =>
     }
   }
@@ -402,17 +421,37 @@ def main(args: Array[String]) {
       currentMethodEvent = ce.parent
     }
   }
+  
+  def addThreadReqs(thread: ThreadReference) {
+	val evtReqMgr = thread.virtualMachine().eventRequestManager
+	
+    val mthdEnterVal = evtReqMgr.createMethodEntryRequest()
+    mthdEnterVal.addThreadFilter(thread)
+    mthdEnterVal.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+    mthdEnterVal.enable()
+  }
+    
+  def WatchThreadStarts() {
+    val evtReqMgr = mainThread.virtualMachine().eventRequestManager
+			  
+    val thrdStartVal = evtReqMgr.createThreadStartRequest()
+	thrdStartVal.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+	//thrdStartVal.addThreadFilter(mainThread)
+	thrdStartVal.enable()
+  }
 
   def createRequests(excludes: Array[String], vm: VirtualMachine) {
     val evtReqMgr = vm.eventRequestManager
 
     val mthdEnterVal = evtReqMgr.createMethodEntryRequest()
     excludes.foreach { mthdEnterVal.addClassExclusionFilter(_) }
+    mthdEnterVal.addThreadFilter(mainThread)
     mthdEnterVal.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     mthdEnterVal.enable()
 
     val mthdExitVal = evtReqMgr.createMethodExitRequest()
     excludes.foreach { mthdExitVal.addClassExclusionFilter(_) }
+    mthdExitVal.addThreadFilter(mainThread)
     mthdExitVal.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     mthdExitVal.enable()
   }
