@@ -41,6 +41,7 @@ import com.sun.jdi.request.EventRequest
 import com.sun.jdi.ClassType
 import com.sun.jdi.ObjectReference
 import com.sun.jdi.StringReference
+import com.sun.jdi.AbsentInformationException
 import java.awt.Paint
 import java.awt.Color
 import scala.util.matching.Regex
@@ -183,9 +184,9 @@ def main(args: Array[String]) {
                           s"arg ${n.name}: ${n.`type`.name} = $argval"
                         }.mkString(",")
                       else ""
-
                     //determine if the method is a Turtle API method
                     if (turtleMethods contains methodEnterEvt.method.name) {
+                      //if(mainThread.frame(1).location().sourceName != "scripteditor") {break;}
                       val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
                       handleMethodEntry(
                         methodEnterEvt.method.name,
@@ -197,6 +198,7 @@ def main(args: Array[String]) {
                         mainThread.frame(1).location().sourceName)
                     }
                     else {
+                      //if(methodEnterEvt.location.sourceName != "scripteditor") {break;}
                       val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
                       handleMethodEntry(
                         methodEnterEvt.method.name,
@@ -209,6 +211,7 @@ def main(args: Array[String]) {
                     }
                   }
                   catch {
+                    case abs: AbsentInformationException => 
                     case t: Throwable =>
                       println(s"${methodEnterEvt.thread().name()} [Exception] [Method Enter] ${methodEnterEvt.method.name} -- ${t.getMessage}")
                   }
@@ -229,6 +232,8 @@ def main(args: Array[String]) {
                     
                     //determine if the method is a Turtle API method
                     if (turtleMethods contains methodExitEvt.method.name) {
+                      //if(mainThread.frame(1).location().sourceName != "scripteditor"){break;}
+
                       val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
                       handleMethodExit(
                         desc,
@@ -239,6 +244,7 @@ def main(args: Array[String]) {
                         mainThread.frame(1).location.sourceName)
                     }
                     else {
+                      //if (methodExitEvt.location.sourceName != "scripteditor"){ break;}
                       val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
                       handleMethodExit(
                         desc,
@@ -251,8 +257,10 @@ def main(args: Array[String]) {
                     }
                   }
                   catch {
+                    case abs: AbsentInformationException =>
+                      println("potatos all around")
                     case t: Throwable =>
-                     //println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
+                     println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
                   }
                 }
               case vmDcEvt: VMDisconnectEvent =>
