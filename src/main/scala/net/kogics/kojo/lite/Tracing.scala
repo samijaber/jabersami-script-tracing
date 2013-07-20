@@ -273,7 +273,7 @@ def main(args: Array[String]) {
       }
     }
     catch {
-      case t: Throwable => //System.err.println(s"[Exception] -- ${t.getMessage}")
+      case t: Throwable => System.err.println(s"[Exception] -- ${t.getMessage}")
     }
   }
 
