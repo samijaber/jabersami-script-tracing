@@ -13,7 +13,7 @@ import net.kogics.kojo.turtle.Turtle
 object TracingBuiltins {
   
   val kojoCtx = new NoOpKojoCtx
-  val spriteCanvas = new SpriteCanvas(kojoCtx)
+  lazy val spriteCanvas = new SpriteCanvas(kojoCtx)
   
   type Turtle = core.Turtle
   type Color = java.awt.Color
