@@ -16,6 +16,8 @@
 package net.kogics.kojo
 package lite
 
+import java.awt.Color
+import java.awt.Dimension
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 
@@ -31,7 +33,8 @@ import net.kogics.kojo.util.Utils
 class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
   val events: JPanel = new JPanel
   events.setLayout(new BoxLayout(events, BoxLayout.Y_AXIS))
-  val traceHolder = new TraceHolder(events)
+  events.setBackground(Color.white)
+  val traceHolder = new TraceHolder(null)
   traceHolder.setCloseable(true)
   traceHolder.setMaximizable(false)
   traceHolder.setMinimizable(false)
@@ -66,24 +69,26 @@ class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
 
     if (source == "scripteditor") {
       Utils.runInSwingThread {
-        val te = new JTextArea(taText)
-        te.setEditable(false)
-        te.setLineWrap(true)
-        te.setWrapStyleWord(true)
+        val te = new JTextArea(taText) {
+          override def getMaximumSize = new Dimension(Short.MaxValue, getPreferredSize.getHeight.toInt)
+          setEditable(false)
+          setLineWrap(true)
+          setWrapStyleWord(true)
 
-        te.addMouseListener(new MouseAdapter {
-          override def mouseClicked(e: MouseEvent) {
-            eventDesc.setText(meDesc)
-            scriptEditor.markTraceLine(lineNum)
-          }
-        })
-
+          addMouseListener(new MouseAdapter {
+            override def mouseClicked(e: MouseEvent) {
+              eventDesc.setText(meDesc)
+              scriptEditor.markTraceLine(lineNum)
+            }
+          })
+        }
+        
         events.add(te)
         events.revalidate()
       }
     }
-    else {
-      println(taText)
-    }
+    //    else {
+    //      println(taText)
+    //    }
   }
 }
