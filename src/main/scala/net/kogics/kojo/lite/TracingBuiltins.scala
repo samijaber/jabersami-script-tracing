@@ -65,16 +65,21 @@ object TracingBuiltins {
   def color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
   def Color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
   def Color(R: Int, B: Int, G: Int, a:Int): Color = new Color(R,B,G,a)
-  
+  def setBackground(c: Paint) = spriteCanvas.setCanvasBackground(c)
+
   /* movement */
+  def savePosHe() {}
+  def restorePosHe() {}
   def clear() {}
   def cleari(){}
   def invisible(){}
   def forward(n: Double) {}
+  def circle(r: Double) {}
   def right() {}
   def right(n: Double) {}
   def left() {}
   def left(n: Double) {}
+  def turn(n: Double) {}
   def back() {}
   def back(n: Double) {}
   def home() {}
@@ -94,13 +99,18 @@ object TracingBuiltins {
       i += 1
     }
   }
-  def circle(r: Double){}
   
   def newTurtle(x: Double, y: Double): Turtle = {
     var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, "/images/turtle32.png", x, y) 
     turtles = turtles :+ t0
     turtles.last
-    }
+  }
+  
+  def newTurtle(x: Double, y: Double, str: String): Turtle = {
+    var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, str, x, y) 
+    turtles = turtles :+ t0
+    turtles.last
+  }
   
   def runInBackground(code: => Unit) = Utils.runAsyncMonitored(code)
 }
