@@ -17,6 +17,7 @@ package net.kogics.kojo.lite
 
 import com.sun.jdi.LocalVariable
 import com.sun.jdi.StackFrame
+import com.sun.jdi.ClassNotLoadedException
 
 class MethodEvent {
   var ended = false
@@ -32,7 +33,7 @@ class MethodEvent {
   //  var allVars = Vector[(LocalVariable, String, String)]()
   //  var dclrdArgs = Vector[(LocalVariable, String)]()
 
-  override def toString() = s"""MethodEvent(
+  override def toString() = try {s"""MethodEvent(
 Entry: $entry
 Exit: $exit
 Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.`type`.name} = ${vs._2}" }}
@@ -41,7 +42,19 @@ Entry Line Number: $entryLineNum
 Exit Line Number: $exitLineNum
 Source: $sourceName
 ended: $ended
+)"""}
+  catch {
+    case e: ClassNotLoadedException => s"""MethodEvent(
+Entry: $entry
+Exit: $exit
+Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: [type not loaded] = ${vs._2}" }}
+Return value: $returnVal
+Entry Line Number: $entryLineNum
+Exit Line Number: $exitLineNum
+Source: $sourceName
+ended: $ended
 )"""
+  }
 
   def isOver() { ended = true }
 

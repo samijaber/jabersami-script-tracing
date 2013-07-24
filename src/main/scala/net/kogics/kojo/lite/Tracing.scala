@@ -36,6 +36,8 @@ import com.sun.jdi.event.EventSet
 import com.sun.jdi.event.MethodEntryEvent
 import com.sun.jdi.event.MethodExitEvent
 import com.sun.jdi.event.VMDisconnectEvent
+import com.sun.jdi.event.VMStartEvent
+import com.sun.jdi.event.VMDeathEvent
 import com.sun.jdi.event.ThreadStartEvent
 import com.sun.jdi.request.EventRequest
 import com.sun.jdi.ClassType
@@ -43,6 +45,8 @@ import com.sun.jdi.ObjectReference
 import com.sun.jdi.StringReference
 import com.sun.jdi.IntegerValue
 import com.sun.jdi.AbsentInformationException
+import com.sun.jdi.ClassNotLoadedException
+import java.lang.reflect.InvocationTargetException 
 import java.awt.Paint
 import java.awt.Color
 import scala.util.matching.Regex
@@ -59,6 +63,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var turtles = Vector[Turtle]()
   var turtlesRefs = Vector[Long]()
   var runningInBG = false
+  val imgPath = "main/resources"
   
   val reporter = new Reporter {
     override def info0(position: Position, msg: String, severity: Severity, force: Boolean) {
@@ -80,7 +85,7 @@ def main(args: Array[String]) {
 """
 
   def stop(){
-    currThread.virtualMachine().exit(0)
+    currThread.virtualMachine().exit(1)
   } 
     
   def compile(code0: String) = {
@@ -130,7 +135,7 @@ def main(args: Array[String]) {
   }
 
   val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat", "repeatWhile", "runInBackground")
-  val turtleMethods = Set("forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes")
+  val turtleMethods = Set("setBackground", "color", "Color", "hueMod", "forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes")
   
   def getThread(vm: VirtualMachine, name: String): ThreadReference = {
     try{
@@ -147,7 +152,6 @@ def main(args: Array[String]) {
   
   
   def trace(code: String) = Utils.runAsync {
-    
     try {
       turtles = Vector[Turtle]()
       turtlesRefs = Vector[Long]()
@@ -168,7 +172,6 @@ def main(args: Array[String]) {
       val evtQueue = vm.eventQueue
       vm.resume
       
-      
       tracingGUI.reset
       
       breakable {
@@ -187,6 +190,7 @@ def main(args: Array[String]) {
                   try {
                     val frame = currThread.frame(0)
                     val toprint =
+                    try {
                       if (methodEnterEvt.method().arguments().size > 0)
                         "(%s)" format methodEnterEvt.method.arguments.map { n =>
                           val argval = frame.getValue(n)
@@ -194,9 +198,13 @@ def main(args: Array[String]) {
                           s"arg ${n.name}: ${n.`type`.name} = $argval"
                         }.mkString(",")
                       else ""
+                        }
+                    catch {
+                      case e: AbsentInformationException => ""
+                      case e: ClassNotLoadedException => ""
+                    }
                     //determine if the method is a Turtle API method
                     if (turtleMethods contains methodEnterEvt.method.name) {
-                      //if(mainThread.frame(1).location().sourceName != "scripteditor") {break;}
                       val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
                       handleMethodEntry(
                         methodEnterEvt.method.name,
@@ -208,22 +216,28 @@ def main(args: Array[String]) {
                         currThread.frame(1).location().sourceName)
                     }
                     else {
-                      //if(methodEnterEvt.location.sourceName != "scripteditor") {break;}
                       val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
+                      var argList = List[LocalVariable]()
+                      try {argList = methodEnterEvt.method.arguments.toList}
+                      catch{case e: AbsentInformationException =>}
+                      var srcName = ""
+                      try {srcName = methodEnterEvt.location().sourceName}
+                      catch{case e: AbsentInformationException => srcName = ""}
                       handleMethodEntry(
                         methodEnterEvt.method.name,
                         desc,
                         false,
                         currThread.frame(0),
-                        methodEnterEvt.method.arguments.toList,
+                        argList,
                         methodEnterEvt.location.lineNumber - lineNumOffset,
-                        methodEnterEvt.location.sourceName)
+                        srcName)
                     }
                   }
                   catch {
-                    case abs: AbsentInformationException => 
+                    case inv: InvocationTargetException => println(inv.printStackTrace())
                     case t: Throwable =>
-                      println(s"${methodEnterEvt.thread().name()} [Exception] [Method Enter] ${methodEnterEvt.method.name} -- ${t.getMessage}")
+                      println(t.printStackTrace())
+                  	  //println(s"[Exception] [Method Enter] [${t.getClass()}] ${methodEnterEvt.method.name} -- ${t.getMessage}")
                   }
                 }
 
@@ -273,18 +287,14 @@ def main(args: Array[String]) {
                     }
                   }
                   catch {
-                    case abs: AbsentInformationException =>
-                      println("There is a AbsentInformationException")
-                      println(abs.printStackTrace())
-                    case nullPoint: NullPointerException =>
-                      println("There is a NullPointerException")
-                      println(nullPoint.printStackTrace())
-                    case t: Throwable =>
-                     println(s"[Exception] [Method Exit] [${t.getClass()}] ${methodExitEvt.method.name} -- ${t.getMessage}")
+                   case t: Throwable =>
+                     println(t.printStackTrace())
+                     //println(s"[Exception] [Method Exit] [${t.getClass()}] ${methodExitEvt.method.name} -- ${t.getMessage}")
                   }
                 }
-              case vmDcEvt: VMDisconnectEvent =>
-                println("VM Disconnected"); break
+              case vmDcEvt: VMDisconnectEvent => println("VM Disconnected"); break
+              case vmStartEvt: VMStartEvent => println("VM Started")
+              case vmDeathEvt: VMDeathEvent => println("VM Dead")
               case _ => println("Other")
             }
           }
@@ -325,21 +335,19 @@ def main(args: Array[String]) {
   def isFromWrapper(stkfrm: StackFrame): Boolean = {stkfrm.thisObject().toString().contains("TracingBuiltins")}
   
   def runTurtleMethod(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable]) {
-    var stdTurtle = isFromWrapper(stkfrm)
+	if (stkfrm.thisObject() == null) break;
+    var stdTurtle = if (name == "newTurtle") true else isFromWrapper(stkfrm)
     import builtins.Tw
     import builtins.TSCanvas
     var turtle: Turtle = Tw.getTurtle
     if (!stdTurtle) {
       var caller = stkfrm.thisObject().uniqueID()
-      /*
-      println("@#@#@#: " + caller)
-      println("@#@#@#: " + turtlesRefs)
-      */
+      //println("caller is " + caller)
+      //println("turtleRefs is " + turtlesRefs)
       var index = turtlesRefs.indexOf(caller)
-      
-      turtle = turtles(index)
+      if (index != -1)
+    	  turtle = turtles(index)
     }
-      
     
     name match {
         /*
@@ -390,7 +398,7 @@ def main(args: Array[String]) {
       case "back" =>
       	val step = stkfrm.getValue(localArgs(0)).toString.toDouble
       	if (stdTurtle) {
-      	  turtle.back(step)
+      	  turtle.back(step)  	    
       	}
       case "home" =>
         turtle.home
@@ -429,7 +437,7 @@ def main(args: Array[String]) {
       case "newTurtle" =>
         if(localArgs.length == 2) {
           val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
-          turtles = turtles :+ TSCanvas.newTurtle(x, y, "/images/turtle32.png")
+          turtles = turtles :+ TSCanvas.newTurtle(x, y)
         }
         else {
           val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
@@ -444,6 +452,9 @@ def main(args: Array[String]) {
       case "setCostumes" =>
         val (a, b) = (stkfrm.getValue(localArgs(0)).toString, stkfrm.getValue(localArgs(1)).toString)
         turtle.setCostumes(a, b)
+  	  case "setBackground" =>
+  	    var c = getColor(stkfrm, localArgs)
+  	    TSCanvas.tCanvas.setCanvasBackground(c)
       case _ =>
     }
   }
