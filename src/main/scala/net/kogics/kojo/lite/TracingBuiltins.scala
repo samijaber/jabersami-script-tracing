@@ -9,12 +9,14 @@ import net.kogics.kojo.picture._
 import net.kogics.kojo.util.Utils
 import lite.canvas.SpriteCanvas
 import net.kogics.kojo.turtle.Turtle
+//import net.kogics.kojo.turtle.TurtleWorldAPI
+import net.kogics.kojo.story.StoryTeller
 
 object TracingBuiltins {
   
   val kojoCtx = new NoOpKojoCtx
   lazy val spriteCanvas = new SpriteCanvas(kojoCtx)
-  
+    
   type Turtle = core.Turtle
   type Color = java.awt.Color
   type Font = java.awt.Font
@@ -26,6 +28,26 @@ object TracingBuiltins {
   def Point2D(x: Double, y: Double) = new java.awt.geom.Point2D.Double(x, y)
 
   val Random = new java.util.Random
+  
+  class Costume {
+      val car = "/media/costumes/car.png"
+      val pencil = "/media/costumes/pencil.png"
+      val bat1 = "/media/costumes/bat1-a.png"
+      val bat2 = "/media/costumes/bat1-b.png"
+      val womanWaving = "/media/costumes/womanwaving.png"
+    }
+    
+  class Background {
+      val trainTrack = "/media/backgrounds/train-tracks3.gif"
+    }
+
+  class Sound {
+      val medieval1 = "/media/music-loops/Medieval1.mp3"
+    }
+
+  val Costume = new Costume
+  val Background = new Background
+  val Sound = new Sound
 
   val blue = JColor.blue
   val red = JColor.red
@@ -61,6 +83,12 @@ object TracingBuiltins {
   val britMod = Utils.britMod _
   
   var turtles = Vector[Turtle]()
+  val turtle0 = spriteCanvas.turtle0
+  
+  val storyTeller = new StoryTeller(kojoCtx)
+  def playMp3Loop(mp3File: String) {
+    storyTeller.playMp3Loop(mp3File)
+  }
   
   def color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
   def Color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
@@ -99,6 +127,22 @@ object TracingBuiltins {
       i += 1
     }
   }
+  
+  def repeatWhile(condition: Boolean) (fn: => Unit) {
+    while (condition) {
+      fn
+    }
+  }
+
+  def changePosition(x: Double, y: Double) {}
+  def scaleCostume(a: Double) {}
+  def setCostumes(costumes: Vector[String]){}
+  
+  
+  
+  def stopActivity() = kojoCtx.stopActivity()
+  def pause(secs: Double) = Thread.sleep((secs * 1000).toLong)
+  /* turtle creation */
   
   def newTurtle(x: Double, y: Double): Turtle = {
     var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, "/images/turtle32.png", x, y) 
