@@ -41,6 +41,7 @@ import com.sun.jdi.request.EventRequest
 import com.sun.jdi.ClassType
 import com.sun.jdi.ObjectReference
 import com.sun.jdi.StringReference
+import com.sun.jdi.IntegerValue
 import com.sun.jdi.AbsentInformationException
 import java.awt.Paint
 import java.awt.Color
@@ -128,8 +129,8 @@ def main(args: Array[String]) {
     vm
   }
 
-  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat", "runInBackground")
-  val turtleMethods = Set("forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle")
+  val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat", "repeatWhile", "runInBackground")
+  val turtleMethods = Set("forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes")
   
   def getThread(vm: VirtualMachine, name: String): ThreadReference = {
     try{
@@ -255,21 +256,31 @@ def main(args: Array[String]) {
                     else {
                       //if (methodExitEvt.location.sourceName != "scripteditor"){ break;}
                       val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                      def rtrnVal: String = {if (methodExitEvt.returnValue() == null) "" else methodExitEvt.returnValue.toString}
+                      //def srcName: String = {if (methodExitEvt.location() == null) "" else methodExitEvt.location().sourceName()}
+                      var srcName = ""
+                      try {srcName = methodExitEvt.location().sourceName}
+                      catch{case e: AbsentInformationException => srcName = ""}
+                      
                       handleMethodExit(
                         desc,
                         false,
                         currThread.frame(0),
                         methodExitEvt.location.lineNumber - lineNumOffset,
-                        methodExitEvt.returnValue.toString,
-                        methodExitEvt.location.sourceName
+                        rtrnVal,
+                        srcName
                       )
                     }
                   }
                   catch {
                     case abs: AbsentInformationException =>
                       println("There is a AbsentInformationException")
+                      println(abs.printStackTrace())
+                    case nullPoint: NullPointerException =>
+                      println("There is a NullPointerException")
+                      println(nullPoint.printStackTrace())
                     case t: Throwable =>
-                     println(s"[Exception] [Method Exit] ${methodExitEvt.method.name} -- ${t.getMessage}")
+                     println(s"[Exception] [Method Exit] [${t.getClass()}] ${methodExitEvt.method.name} -- ${t.getMessage}")
                   }
                 }
               case vmDcEvt: VMDisconnectEvent =>
@@ -424,24 +435,34 @@ def main(args: Array[String]) {
           val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
           turtles = turtles :+ TSCanvas.newTurtle(x, y, str)
         }
+      case "changePosition" =>
+        val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
+        turtle.changePosition(x, y)
+      case "scaleCostume" => 
+        val a = stkfrm.getValue(localArgs(0)).toString.toDouble
+        turtle.scaleCostume(a)
+      case "setCostumes" =>
+        val (a, b) = (stkfrm.getValue(localArgs(0)).toString, stkfrm.getValue(localArgs(1)).toString)
+        turtle.setCostumes(a, b)
       case _ =>
     }
   }
   
   def getColor(stkfrm: StackFrame, localArgs: List[LocalVariable]): Color = {
     var colorVal = stkfrm.getValue(localArgs(0)).asInstanceOf[ObjectReference]
-	var mthd = colorVal.referenceType.methodsByName("toString")(0)
+	
+    var mthd = colorVal.referenceType.methodsByName("toString")(0)
 	var rtrndValue = colorVal.invokeMethod(currThread, mthd, new java.util.ArrayList, ObjectReference.INVOKE_SINGLE_THREADED)
-    var str = rtrndValue.asInstanceOf[StringReference].value()
+	var str = rtrndValue.asInstanceOf[StringReference].value()
     var pattern = new Regex("\\d{1,3}")
     var rgb = Vector[Int]()
-    var colors = (pattern findAllIn str).foreach(c => rgb = rgb :+ c.toInt)
-    if (rgb.length == 3) {
-      new Color(rgb(0),rgb(1),rgb(2))
-    }
-    else {
-      new Color(rgb(0),rgb(1),rgb(2), rgb(3))
-    }
+	(pattern findAllIn str).foreach(c => rgb = rgb :+ c.toInt)
+
+    var alphaMthd = colorVal.referenceType.methodsByName("getAlpha")(0)
+    var alphaValue = colorVal.invokeMethod(currThread, alphaMthd, new java.util.ArrayList, ObjectReference.INVOKE_SINGLE_THREADED)
+	var alpha = alphaValue.asInstanceOf[IntegerValue].value
+    
+    new Color(rgb(0),rgb(1),rgb(2), alpha)
   }
   
 
