@@ -9,12 +9,11 @@ import net.kogics.kojo.picture._
 import net.kogics.kojo.util.Utils
 import lite.canvas.SpriteCanvas
 import net.kogics.kojo.turtle.Turtle
-//import net.kogics.kojo.turtle.TurtleWorldAPI
 import net.kogics.kojo.story.StoryTeller
 
 object TracingBuiltins {
   
-  val kojoCtx = new NoOpKojoCtx
+  lazy val kojoCtx = new NoOpKojoCtx
   lazy val spriteCanvas = new SpriteCanvas(kojoCtx)
     
   type Turtle = core.Turtle
@@ -82,10 +81,10 @@ object TracingBuiltins {
   val satMod = Utils.satMod _
   val britMod = Utils.britMod _
   
+  lazy val turtle0 = spriteCanvas.turtle0
   var turtles = Vector[Turtle]()
-  val turtle0 = spriteCanvas.turtle0
   
-  val storyTeller = new StoryTeller(kojoCtx)
+  lazy val storyTeller = new StoryTeller(kojoCtx)
   def playMp3Loop(mp3File: String) {
     storyTeller.playMp3Loop(mp3File)
   }
@@ -93,7 +92,7 @@ object TracingBuiltins {
   def color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
   def Color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
   def Color(R: Int, B: Int, G: Int, a:Int): Color = new Color(R,B,G,a)
-  def setBackground(c: Paint) = spriteCanvas.setCanvasBackground(c)
+  def setBackground(c: Paint) {}
 
   /* movement */
   def savePosHe() {}
@@ -145,13 +144,15 @@ object TracingBuiltins {
   /* turtle creation */
   
   def newTurtle(x: Double, y: Double): Turtle = {
-    var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, "/images/turtle32.png", x, y) 
+    var t0 = spriteCanvas.newTurtle(x, y, "/images/turtle32.png")
+    //var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, "/images/turtle32.png", x, y) 
     turtles = turtles :+ t0
     turtles.last
   }
   
   def newTurtle(x: Double, y: Double, str: String): Turtle = {
-    var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, str, x, y) 
+        var t0 = spriteCanvas.newTurtle(x, y, str)
+    //var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, str, x, y) 
     turtles = turtles :+ t0
     turtles.last
   }
