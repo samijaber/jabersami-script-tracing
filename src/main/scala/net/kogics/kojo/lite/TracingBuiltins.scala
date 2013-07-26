@@ -28,6 +28,9 @@ object TracingBuiltins {
 
   val Random = new java.util.Random
   
+  def epochTimeMillis = System.currentTimeMillis()
+  def epochTime = System.currentTimeMillis() / 1000.0
+
   class Costume {
       val car = "/media/costumes/car.png"
       val pencil = "/media/costumes/pencil.png"
@@ -137,6 +140,11 @@ object TracingBuiltins {
   def scaleCostume(a: Double) {}
   def setCostumes(costumes: Vector[String]){}
   
+  def axesOn(){}
+  def axesOff(){}
+  def gridOn(){}
+  def gridOff(){}
+  def zoom(x: Double, y: Double, z: Double) {}
   
   
   def stopActivity() = kojoCtx.stopActivity()
