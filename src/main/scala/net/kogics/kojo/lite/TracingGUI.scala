@@ -87,8 +87,8 @@ class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
         events.revalidate()
       }
     }
-    //    else {
-    //      println(taText)
-    //    }
+        else {
+          println(taText)
+        }
   }
 }

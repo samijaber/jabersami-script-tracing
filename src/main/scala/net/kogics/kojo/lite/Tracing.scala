@@ -135,7 +135,7 @@ def main(args: Array[String]) {
   }
 
   val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat", "repeatWhile", "runInBackground")
-  val turtleMethods = Set("setBackground", "color", "Color", "hueMod", "forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes")
+  val turtleMethods = Set("setBackground", "color", "Color", "hueMod", "forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes", "axesOn", "axesOff", "gridOn", "gridOff", "zoom")
   
   def getThread(vm: VirtualMachine, name: String): ThreadReference = {
     try{
@@ -220,10 +220,20 @@ def main(args: Array[String]) {
                       var argList = List[LocalVariable]()
                       try {argList = methodEnterEvt.method.arguments.toList}
                       catch{case e: AbsentInformationException =>}
-                      var srcName = ""
-                      try {srcName = methodEnterEvt.location().sourceName}
-                      catch{case e: AbsentInformationException => srcName = ""}
-                      handleMethodEntry(
+                      
+                      var callerSrcName = try{currThread.frame(1).location.sourceName}
+                      catch{case _: Throwable => ""}
+                      
+                      var srcName = try {
+                        if(callerSrcName == "scripteditor")
+                          "scripteditor"
+                        else
+                          methodEnterEvt.location().sourceName
+                      }
+                      catch {
+                        case e: AbsentInformationException => ""
+                      }
+                    handleMethodEntry(
                         methodEnterEvt.method.name,
                         desc,
                         false,
@@ -268,13 +278,21 @@ def main(args: Array[String]) {
                         currThread.frame(1).location.sourceName)
                     }
                     else {
-                      //if (methodExitEvt.location.sourceName != "scripteditor"){ break;}
                       val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
                       def rtrnVal: String = {if (methodExitEvt.returnValue() == null) "" else methodExitEvt.returnValue.toString}
-                      //def srcName: String = {if (methodExitEvt.location() == null) "" else methodExitEvt.location().sourceName()}
-                      var srcName = ""
-                      try {srcName = methodExitEvt.location().sourceName}
-                      catch{case e: AbsentInformationException => srcName = ""}
+
+                      var callerSrcName = try{currThread.frame(1).location.sourceName}
+                      catch{case _: Throwable => ""}
+                      
+                      var srcName = try {
+                        if(callerSrcName == "scripteditor")
+                          "scripteditor"
+                        else
+                          methodExitEvt.location().sourceName
+                      }
+                      catch {
+                        case e: AbsentInformationException => ""
+                      }
                       
                       handleMethodExit(
                         desc,
@@ -455,6 +473,17 @@ def main(args: Array[String]) {
   	  case "setBackground" =>
   	    var c = getColor(stkfrm, localArgs)
   	    TSCanvas.tCanvas.setCanvasBackground(c)
+  	  case "axesOn" =>
+  	    TSCanvas.axesOn
+  	  case "axesOff" =>
+  	    TSCanvas.axesOff
+  	  case "gridOn" =>
+  	    TSCanvas.gridOn
+  	  case "gridOff" =>
+  	    TSCanvas.gridOff
+  	  case "zoom" =>
+  	    val (x, y, z) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(0)).toString.toDouble)
+  	    TSCanvas.zoom(x, y, z)
       case _ =>
     }
   }
