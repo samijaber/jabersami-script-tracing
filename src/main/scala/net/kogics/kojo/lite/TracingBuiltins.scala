@@ -76,9 +76,6 @@ object TracingBuiltins {
   val noColor = C.noColor
 
   val Kc = new staging.KeyCodes
-//  val Costume = new Tw.Costume
-//  val Background = new Tw.Background
-//  val Sound = new Tw.Sound
   
   val hueMod = Utils.hueMod _
   val satMod = Utils.satMod _

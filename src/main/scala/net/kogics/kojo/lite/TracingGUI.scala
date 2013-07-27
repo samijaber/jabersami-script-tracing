@@ -21,14 +21,14 @@ import java.awt.Dimension
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 
+import net.kogics.kojo.lite.topc.TraceHolder
+import net.kogics.kojo.util.Utils
+
 import javax.swing.BoxLayout
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JSplitPane
 import javax.swing.JTextArea
-
-import net.kogics.kojo.lite.topc.TraceHolder
-import net.kogics.kojo.util.Utils
 
 class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
   val events: JPanel = new JPanel
@@ -82,13 +82,13 @@ class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
             }
           })
         }
-        
+
         events.add(te)
         events.revalidate()
       }
     }
-        else {
-          println(taText)
-        }
+    else {
+      //println(taText)
+    }
   }
 }

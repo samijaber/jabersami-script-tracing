@@ -378,7 +378,7 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
     val UploadCommand = "UploadCommand"
     val TraceScript = "TraceScript"
     val StopTraceScript = "StopTraceScript"
-      
+
     val actionListener = new ActionListener {
       def actionPerformed(e: ActionEvent) = e.getActionCommand match {
         case RunScript =>
@@ -478,7 +478,7 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
 
     toolbar.add(traceButton)
     toolbar.add(stopTraceButton)
-    
+
     (toolbar, runButton, runWorksheetButton, compileButton, stopButton, hNextButton, hPrevButton, clearSButton, clearButton, cexButton, traceButton, stopTraceButton)
   }
 
@@ -557,6 +557,18 @@ class ScriptEditor(val execSupport: CodeExecutionSupport, frame: JFrame) extends
     catch {
       // In case the user changes the contents of the script editor so that it is out of sync with the current trace
       case t: Throwable =>
+    }
+  }
+
+  def getTraceLine(line: Int): String = {
+    try {
+      var lineStart = codePane.getLineStartOffset(line - 1)
+      var length = codePane.getLineEndOffset(line - 1) - lineStart
+      codePane.getText(lineStart, length)
+    }
+    catch {
+      // In case the user changes the contents of the script editor so that it is out of sync with the current trace
+      case t: Throwable => ""
     }
   }
 
