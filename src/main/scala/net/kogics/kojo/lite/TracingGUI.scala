@@ -60,14 +60,17 @@ class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
     kojoCtx.makeTraceWindowVisible(traceHolder)
   }
 
-  def addEvent(me: MethodEvent, source: String) = {
+  def addEvent(me: MethodEvent) = {
     val meDesc = me.toString
     val ended = me.ended
     val uiLevel = me.level + 1
     val taText = if (me.ended) "< " * uiLevel + me.exit else "> " * uiLevel + me.entry
     val lineNum = if (me.ended) me.exitLineNum else me.entryLineNum
 
-    if (source == "scripteditor") {
+    if (me.sourceName != "scripteditor" && me.callerSourceName == "scripteditor" && (me.returnVal == "<void value>" || me.returnVal == "null")) {
+      println(taText)
+    }
+    else if (me.sourceName == "scripteditor" || (me.callerSourceName == "scripteditor" && me.callerLine.contains(me.methodName))) {
       Utils.runInSwingThread {
         val te = new JTextArea(taText) {
           override def getMaximumSize = new Dimension(Short.MaxValue, getPreferredSize.getHeight.toInt)
@@ -88,7 +91,7 @@ class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
       }
     }
     else {
-      //println(taText)
+      println(taText)
     }
   }
 }
