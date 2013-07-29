@@ -15,7 +15,6 @@
  */
 package net.kogics.kojo.lite
 
-import com.sun.jdi.ClassNotLoadedException
 import com.sun.jdi.LocalVariable
 import com.sun.jdi.StackFrame
 
@@ -32,35 +31,29 @@ class MethodEvent {
   var methodName: String = _
   var sourceName: String = _
   var callerSourceName: String = _
+  var callerLineNum: Int = -1
   var callerLine: String = _
   //  var allVars = Vector[(LocalVariable, String, String)]()
   //  var dclrdArgs = Vector[(LocalVariable, String)]()
 
-  override def toString() = try {
+  override def toString() = {
+    var entryNum = entryLineNum
+    var exitNum = exitLineNum
+    if (callerLineNum != -1) {
+      entryNum = callerLineNum
+      exitNum = callerLineNum
+    }
     s"""MethodEvent(
-Entry: $entry
-Exit: $exit
-Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.`type`.name} = ${vs._2}" }}
-Return value: $returnVal
-Entry Line Number: $entryLineNum
-Exit Line Number: $exitLineNum
-Source: $sourceName
-ended: $ended
-)"""
+    Entry: $entry
+    Exit: $exit
+    Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: ${lv.typeName} = ${vs._2}" }}
+    Return value: $returnVal
+    Entry Line Number: $entryNum
+	Exit Line Number: $exitNum
+	Source: $sourceName
+	ended: $ended
+	)"""
   }
-  catch {
-    case e: ClassNotLoadedException => s"""MethodEvent(
-Entry: $entry
-Exit: $exit
-Args: ${entryVars map { vs => val lv = vs._1; s"${lv.name}: [type not loaded] = ${vs._2}" }}
-Return value: $returnVal
-Entry Line Number: $entryLineNum
-Exit Line Number: $exitLineNum
-Source: $sourceName
-ended: $ended
-)"""
-  }
-
   def isOver() { ended = true }
 
   def setParent(p: Option[MethodEvent]) {

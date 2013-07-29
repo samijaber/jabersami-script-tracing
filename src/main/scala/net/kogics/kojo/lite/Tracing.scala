@@ -213,7 +213,8 @@ def main(args: Array[String]) {
                         currThread.frame(1).location().lineNumber - lineNumOffset,
                         currThread.frame(1).location().sourceName,
                         "",
-                        "")
+                        "",
+                        0)
                     }
                     else {
                       val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
@@ -224,7 +225,10 @@ def main(args: Array[String]) {
                       val callerSrcName = try { currThread.frame(1).location.sourceName }
                       catch { case _: Throwable => "N/A" }
 
-                      val callerLine = try { scriptEditor.getTraceLine(currThread.frame(1).location().lineNumber - lineNumOffset) }
+                      val callerLineNum = try { currThread.frame(1).location().lineNumber - lineNumOffset }
+                      catch { case _: Throwable => -1 }
+
+                      val callerLine = try { scriptEditor.getTraceLine(callerLineNum) }
                       catch { case _: Throwable => "N/A" }
 
                       val srcName = try { methodEnterEvt.location().sourceName }
@@ -239,7 +243,9 @@ def main(args: Array[String]) {
                         methodEnterEvt.location.lineNumber - lineNumOffset,
                         srcName,
                         callerSrcName,
-                        callerLine)
+                        callerLine,
+                        callerLineNum
+                        )
                     }
                   }
                   catch {
@@ -319,7 +325,7 @@ def main(args: Array[String]) {
   }
 
   var currentMethodEvent: Option[MethodEvent] = None
-  def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, source: String, callerSource: String, callerLine: String) {
+  def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, source: String, callerSource: String, callerLine: String, callerLineNum: Int) {
     var newEvt = new MethodEvent()
     newEvt.entry = desc
     newEvt.entryLineNum = lineNum
@@ -328,6 +334,7 @@ def main(args: Array[String]) {
     newEvt.sourceName = source
     newEvt.callerSourceName = callerSource
     newEvt.callerLine = callerLine
+    newEvt.callerLineNum = callerLineNum
     newEvt.methodName = name
     currentMethodEvent = Some(newEvt)
     tracingGUI.addEvent(currentMethodEvent.get)
