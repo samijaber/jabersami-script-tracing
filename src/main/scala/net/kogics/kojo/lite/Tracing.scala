@@ -211,7 +211,9 @@ def main(args: Array[String]) {
                         currThread.frame(0),
                         methodEnterEvt.method.arguments.toList,
                         currThread.frame(1).location().lineNumber - lineNumOffset,
-                        currThread.frame(1).location().sourceName)
+                        currThread.frame(1).location().sourceName,
+                        "",
+                        "")
                     }
                     else {
                       val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
@@ -220,23 +222,14 @@ def main(args: Array[String]) {
                       catch { case e: AbsentInformationException => }
 
                       val callerSrcName = try { currThread.frame(1).location.sourceName }
-                      catch { case _: Throwable => "" }
+                      catch { case _: Throwable => "N/A" }
 
-                      val srcName = try {
-                        val mthdName = methodEnterEvt.method.name
-                        val line = scriptEditor.getTraceLine(currThread.frame(1).location().lineNumber - lineNumOffset)
-                        //println("the method's name is " + mthdName)
-                        //println("the line is: \n" + line)
-                        if (callerSrcName == "scripteditor" && line.contains(mthdName))
-                          "scripteditor"
-                        else {
-                          //println(currThread.frame(1).location + " no es " + methodEnterEvt.method)
-                          methodEnterEvt.location().sourceName
-                        }
-                      }
-                      catch {
-                        case e: AbsentInformationException => ""
-                      }
+                      val callerLine = try { scriptEditor.getTraceLine(currThread.frame(1).location().lineNumber - lineNumOffset) }
+                      catch { case _: Throwable => "N/A" }
+
+                      val srcName = try { methodEnterEvt.location().sourceName }
+                      catch { case e: Throwable => "" }
+
                       handleMethodEntry(
                         methodEnterEvt.method.name,
                         desc,
@@ -244,7 +237,9 @@ def main(args: Array[String]) {
                         currThread.frame(0),
                         argList,
                         methodEnterEvt.location.lineNumber - lineNumOffset,
-                        srcName)
+                        srcName,
+                        callerSrcName,
+                        callerLine)
                     }
                   }
                   catch {
@@ -259,56 +254,32 @@ def main(args: Array[String]) {
                 if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
                   try {
                     currThread = methodExitEvt.thread()
-
                     //Vectors to keep track of new turtlesRefs
                     if (methodExitEvt.method.name == "newTurtle" && isFromWrapper(currThread.frame(0))) {
                       var ref = methodExitEvt.returnValue().asInstanceOf[ObjectReference].uniqueID()
-                      //println("@$*#$#$#$#$#$# Adding ID: " + ref)
                       turtlesRefs = turtlesRefs :+ ref
                     }
-
                     //determine if the method is a Turtle API method
                     if (turtleMethods contains methodExitEvt.method.name) {
-                      //if(mainThread.frame(1).location().sourceName != "scripteditor"){break;}
-
                       val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
                       handleMethodExit(
                         desc,
                         true,
                         currThread.frame(0),
                         currThread.frame(1).location.lineNumber - lineNumOffset,
-                        methodExitEvt.returnValue.toString,
-                        currThread.frame(1).location.sourceName)
+                        methodExitEvt.returnValue.toString
+                      )
                     }
                     else {
                       val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
                       def rtrnVal: String = { if (methodExitEvt.returnValue() == null) "" else methodExitEvt.returnValue.toString }
 
-                      val callerSrcName = try { currThread.frame(1).location.sourceName }
-                      catch { case _: Throwable => "" }
-
-                      val srcName = try {
-                        val mthdName = methodExitEvt.method.name
-                        val line = scriptEditor.getTraceLine(currThread.frame(1).location().lineNumber - lineNumOffset)
-                        //println("the method's name is " + mthdName)
-                        //println("the line is: \n" + line)
-                        if (callerSrcName == "scripteditor" && line.contains(mthdName))
-                          "scripteditor"
-                        else {
-                          //println(currThread.frame(1).location + " no es " + methodEnterEvt.method)
-                          methodExitEvt.location().sourceName
-                        }
-                      }
-                      catch {
-                        case e: AbsentInformationException => ""
-                      }
                       handleMethodExit(
                         desc,
                         false,
                         currThread.frame(0),
                         methodExitEvt.location.lineNumber - lineNumOffset,
-                        rtrnVal,
-                        srcName
+                        rtrnVal
                       )
                     }
                   }
@@ -320,9 +291,12 @@ def main(args: Array[String]) {
                 }
               case vmDcEvt: VMDisconnectEvent =>
                 println("VM Disconnected"); break
-              case vmStartEvt: VMStartEvent => println("VM Started")
-              case vmDeathEvt: VMDeathEvent => println("VM Dead")
-              case _                        => println("Other")
+              case vmStartEvt: VMStartEvent =>
+                println("VM Started")
+              case vmDeathEvt: VMDeathEvent =>
+                println("VM Dead")
+              case _ =>
+                println("Other")
             }
           }
           evtSet.resume()
@@ -345,15 +319,18 @@ def main(args: Array[String]) {
   }
 
   var currentMethodEvent: Option[MethodEvent] = None
-  def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, source: String) {
+  def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, source: String, callerSource: String, callerLine: String) {
     var newEvt = new MethodEvent()
     newEvt.entry = desc
     newEvt.entryLineNum = lineNum
     newEvt.setEntryVars(stkfrm, localArgs)
     newEvt.setParent(currentMethodEvent)
     newEvt.sourceName = source
+    newEvt.callerSourceName = callerSource
+    newEvt.callerLine = callerLine
+    newEvt.methodName = name
     currentMethodEvent = Some(newEvt)
-    tracingGUI.addEvent(currentMethodEvent.get, source)
+    tracingGUI.addEvent(currentMethodEvent.get)
     if (isTurtle) {
       runTurtleMethod(name, stkfrm, localArgs)
     }
@@ -369,8 +346,6 @@ def main(args: Array[String]) {
     var turtle: Turtle = Tw.getTurtle
     if (!stdTurtle) {
       var caller = stkfrm.thisObject().uniqueID()
-      //println("caller is " + caller)
-      //println("turtleRefs is " + turtlesRefs)
       var index = turtlesRefs.indexOf(caller)
       if (index != -1)
         turtle = turtles(index)
@@ -514,15 +489,15 @@ def main(args: Array[String]) {
     new Color(rgb(0), rgb(1), rgb(2), alpha)
   }
 
-  def handleMethodExit(desc: String, isTurtle: Boolean, stkfrm: StackFrame, lineNum: Int, retVal: String, source: String) {
+  def handleMethodExit(desc: String, isTurtle: Boolean, stkfrm: StackFrame, lineNum: Int, retVal: String) {
     currentMethodEvent.foreach { ce =>
       ce.isOver()
       ce.exit = desc
       ce.exitLineNum = lineNum
       ce.returnVal = retVal
-      if (!isTurtle) {
-        tracingGUI.addEvent(currentMethodEvent.get, source)
-      }
+
+      tracingGUI.addEvent(currentMethodEvent.get)
+
       currentMethodEvent = ce.parent
     }
   }
