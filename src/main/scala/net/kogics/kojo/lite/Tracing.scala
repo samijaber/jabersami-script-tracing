@@ -134,7 +134,7 @@ def main(args: Array[String]) {
   }
 
   val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat", "repeatWhile", "runInBackground")
-  val turtleMethods = Set("setBackground", "color", "Color", "hueMod", "forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes", "axesOn", "axesOff", "gridOn", "gridOff", "zoom")
+  val turtleMethods = Set("setBackground", "color", "forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes", "axesOn", "axesOff", "gridOn", "gridOff", "zoom")
 
   def getThread(vm: VirtualMachine, name: String): ThreadReference = {
     try {
@@ -201,52 +201,36 @@ def main(args: Array[String]) {
                       catch {
                         case e: AbsentInformationException => ""
                       }
-                    //determine if the method is a Turtle API method
-                    if (turtleMethods contains methodEnterEvt.method.name) {
-                      val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
-                      handleMethodEntry(
-                        methodEnterEvt.method.name,
-                        desc,
-                        true,
-                        currThread.frame(0),
-                        methodEnterEvt.method.arguments.toList,
-                        currThread.frame(1).location().lineNumber - lineNumOffset,
-                        currThread.frame(1).location().sourceName,
-                        "",
-                        "",
-                        0)
-                    }
-                    else {
-                      val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
-                      var argList = List[LocalVariable]()
-                      try { argList = methodEnterEvt.method.arguments.toList }
-                      catch { case e: AbsentInformationException => }
+                      
+                    val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
+                    var argList = List[LocalVariable]()
+                    try { argList = methodEnterEvt.method.arguments.toList }
+                    catch { case e: AbsentInformationException => }
 
-                      val callerSrcName = try { currThread.frame(1).location.sourceName }
-                      catch { case _: Throwable => "N/A" }
+                    val callerSrcName = try { currThread.frame(1).location.sourceName }
+                    catch { case _: Throwable => "N/A" }
 
-                      val callerLineNum = try { currThread.frame(1).location().lineNumber - lineNumOffset }
-                      catch { case _: Throwable => -1 }
+                    val callerLineNum = try { currThread.frame(1).location().lineNumber - lineNumOffset }
+                    catch { case _: Throwable => -1 }
 
-                      val callerLine = try { scriptEditor.getTraceLine(callerLineNum) }
-                      catch { case _: Throwable => "N/A" }
+                    val callerLine = try { scriptEditor.getTraceLine(callerLineNum) }
+                    catch { case _: Throwable => "N/A" }
 
-                      val srcName = try { methodEnterEvt.location().sourceName }
-                      catch { case e: Throwable => "" }
+                    val srcName = try { methodEnterEvt.location().sourceName }
+                    catch { case e: Throwable => "" }
 
-                      handleMethodEntry(
-                        methodEnterEvt.method.name,
-                        desc,
-                        false,
-                        currThread.frame(0),
-                        argList,
-                        methodEnterEvt.location.lineNumber - lineNumOffset,
-                        srcName,
-                        callerSrcName,
-                        callerLine,
-                        callerLineNum
-                        )
-                    }
+                    handleMethodEntry(
+                      methodEnterEvt.method.name,
+                      desc,
+                      turtleMethods contains methodEnterEvt.method.name,
+                      currThread.frame(0),
+                      argList,
+                      methodEnterEvt.location.lineNumber - lineNumOffset,
+                      srcName,
+                      callerSrcName,
+                      callerLine,
+                      callerLineNum
+                    )
                   }
                   catch {
                     case inv: InvocationTargetException => println(inv.printStackTrace())
