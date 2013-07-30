@@ -188,6 +188,10 @@ class Turtle(canvas: SCanvas, costumeFile: String, initX: Double,
     turtle.repaint()
   }
 
+  def lastLine = Utils.runInSwingThreadAndWait {
+    penPaths.last.lastLine
+  }
+
   // to be called on swing thread
   private def forwardNoAnim(n: Double) {
     endForwardMove(pointAfterForward(n))

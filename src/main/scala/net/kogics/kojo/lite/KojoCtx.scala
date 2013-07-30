@@ -19,6 +19,7 @@ package lite
 import java.awt.Color
 import java.awt.Dimension
 import java.awt.Toolkit
+import java.awt.geom.Point2D
 import java.io.File
 import java.util.prefs.Preferences
 
@@ -27,6 +28,7 @@ import javax.swing.JFrame
 
 import net.kogics.kojo.action.CloseFile
 import net.kogics.kojo.core.DelegatingSpriteListener
+import net.kogics.kojo.core.Picture
 import net.kogics.kojo.core.SpriteListener
 import net.kogics.kojo.lite.action.FullScreenBaseAction
 import net.kogics.kojo.lite.action.FullScreenCanvasAction
@@ -373,5 +375,17 @@ class KojoCtx(val subKojo: Boolean) extends core.KojoCtx {
 
   def showStatusCaretPos(line: Int, col: Int) {
     statusBar.showCaretPos(line, col)
+  }
+
+  def picLine(p1: Point2D.Double, p2: Point2D.Double): Picture = {
+    implicit val canvas = topcs.dch.dc
+    picture.Pic { t =>
+      t.setPosition(p1.x, p1.y)
+      t.moveTo(p2.x, p2.y)
+    }
+  }
+
+  def repaintCanvas() {
+    topcs.dch.dc.repaint()
   }
 }

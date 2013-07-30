@@ -16,6 +16,7 @@
 package net.kogics.kojo.lite
 
 import java.awt.Color
+import java.awt.geom.Point2D
 import java.io.File
 import java.lang.reflect.InvocationTargetException
 
@@ -201,7 +202,7 @@ def main(args: Array[String]) {
                       catch {
                         case e: AbsentInformationException => ""
                       }
-                      
+
                     val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
                     var argList = List[LocalVariable]()
                     try { argList = methodEnterEvt.method.arguments.toList }
@@ -321,15 +322,18 @@ def main(args: Array[String]) {
     newEvt.callerLineNum = callerLineNum
     newEvt.methodName = name
     currentMethodEvent = Some(newEvt)
-    tracingGUI.addEvent(currentMethodEvent.get)
+    var ret: Option[(Point2D.Double, Point2D.Double)] = None
     if (isTurtle) {
-      runTurtleMethod(name, stkfrm, localArgs)
+      ret = runTurtleMethod(name, stkfrm, localArgs)
     }
+    tracingGUI.addEvent(currentMethodEvent.get, ret)
+
   }
 
   def isFromWrapper(stkfrm: StackFrame): Boolean = { stkfrm.thisObject().toString().contains("TracingBuiltins") }
 
-  def runTurtleMethod(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable]) {
+  def runTurtleMethod(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable]): Option[(Point2D.Double, Point2D.Double)] = {
+    var ret: Option[(Point2D.Double, Point2D.Double)] = None
     if (stkfrm.thisObject() == null) break;
     var stdTurtle = if (name == "newTurtle") true else isFromWrapper(stkfrm)
     import builtins.Tw
@@ -363,6 +367,7 @@ def main(args: Array[String]) {
       case "forward" =>
         val step = stkfrm.getValue(localArgs(0)).toString.toDouble
         turtle.forward(step)
+        ret = Some(turtle.lastLine)
       case "right" =>
         if (!stdTurtle) {
           //do nothing
@@ -461,6 +466,7 @@ def main(args: Array[String]) {
         TSCanvas.zoom(x, y, z)
       case _ =>
     }
+    ret
   }
 
   def getColor(stkfrm: StackFrame, localArgs: List[LocalVariable]): Color = {
@@ -487,7 +493,7 @@ def main(args: Array[String]) {
       ce.exitLineNum = lineNum
       ce.returnVal = retVal
 
-      tracingGUI.addEvent(currentMethodEvent.get)
+      tracingGUI.addEvent(currentMethodEvent.get, None)
 
       currentMethodEvent = ce.parent
     }

@@ -16,6 +16,7 @@
 package net.kogics.kojo.core
 
 import java.awt.Color
+import java.awt.geom.Point2D
 
 import javax.swing.Action
 import javax.swing.JCheckBoxMenuItem
@@ -91,6 +92,8 @@ trait KojoCtx {
   def setEditorTabSize(ts: Int): Unit
   def showStatusText(text: String): Unit
   def showStatusCaretPos(line: Int, col: Int): Unit
+  def picLine(p1: Point2D.Double, p2: Point2D.Double): Picture
+  def repaintCanvas(): Unit
   var fps: Int
   var screenDPI: Int
   def subKojo: Boolean

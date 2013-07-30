@@ -2,12 +2,14 @@ package net.kogics.kojo
 package lite
 
 import java.awt.Color
+import java.awt.geom.Point2D
 
 import javax.swing.Action
 import javax.swing.JCheckBoxMenuItem
 import javax.swing.JFrame
 
 import net.kogics.kojo.core.NoopSpriteListener
+import net.kogics.kojo.core.Picture
 import net.kogics.kojo.core.SpriteListener
 import net.kogics.kojo.util.Utils
 
@@ -84,6 +86,8 @@ class NoOpKojoCtx extends core.KojoCtx {
   def showStatusText(text: String): Unit = {}
   def showStatusCaretPos(line: Int, col: Int): Unit = {}
   def setEditorTabSize(ts: Int): Unit = {}
+  def picLine(p1: Point2D.Double, p2: Point2D.Double): Picture = null
+  def repaintCanvas() {}
   var fps = 50
   var screenDPI = 72
   def subKojo: Boolean = false
