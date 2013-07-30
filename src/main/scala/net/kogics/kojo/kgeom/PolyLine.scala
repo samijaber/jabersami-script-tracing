@@ -43,7 +43,7 @@ class PolyLine extends PNode {
   def addPoint(x: Double, y: Double): Unit = addPoint(new Point2D.Double(x, y))
   def lineTo(x: Double, y: Double) = addPoint(new Point2D.Double(x, y))
   def removeLastPoint() {
-    points.remove(points.size-1)
+    points.remove(points.size - 1)
     buildGeneralPath()
   }
 
@@ -76,8 +76,16 @@ class PolyLine extends PNode {
     }
 
     polyLinePath.lineTo(p.x, p.y)
-    
+
     updateBounds()
+  }
+
+  def lastLine: (Point2D.Double, Point2D.Double) = {
+    val sz = points.size
+    if (sz > 1)
+      (points(sz - 2), points(sz - 1))
+    else
+      throw new IllegalStateException
   }
 
   def close() {
@@ -100,10 +108,10 @@ class PolyLine extends PNode {
 
   def updateBounds() {
     // the line below significantly slows things down for things like 36 circles
-//    val b = stroke.createStrokedShape(polyLinePath).getBounds2D()
+    //    val b = stroke.createStrokedShape(polyLinePath).getBounds2D()
     val b = polyLinePath.getBounds2D()
     val w = stroke.getLineWidth
-    super.setBounds(b.getX()-w/2.0, b.getY()-w/2.0, b.getWidth()+w, b.getHeight()+w)
+    super.setBounds(b.getX() - w / 2.0, b.getY() - w / 2.0, b.getWidth() + w, b.getHeight() + w)
     repaint()
   }
 
@@ -129,7 +137,7 @@ class PolyLine extends PNode {
     println("Cannot set bounds")
     false
   }
-  
+
   def map(fn: Point2D.Double => Point2D.Double) = {
     val result = PolyLine(points.map(fn))
     result.setPaint(getPaint)

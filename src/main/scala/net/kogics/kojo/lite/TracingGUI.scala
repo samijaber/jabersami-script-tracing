@@ -20,15 +20,17 @@ import java.awt.Color
 import java.awt.Dimension
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-
-import net.kogics.kojo.lite.topc.TraceHolder
-import net.kogics.kojo.util.Utils
+import java.awt.geom.Point2D
 
 import javax.swing.BoxLayout
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JSplitPane
 import javax.swing.JTextArea
+
+import net.kogics.kojo.core.Picture
+import net.kogics.kojo.lite.topc.TraceHolder
+import net.kogics.kojo.util.Utils
 
 class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
   val events: JPanel = new JPanel
@@ -40,6 +42,7 @@ class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
   traceHolder.setMinimizable(false)
   traceHolder.setExternalizable(false)
 
+  var currMarker: Option[Picture] = None
   var eventDesc: JTextArea = _
   var eventHolder: JSplitPane = _
 
@@ -60,7 +63,8 @@ class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
     kojoCtx.makeTraceWindowVisible(traceHolder)
   }
 
-  def addEvent(me: MethodEvent) = {
+  def addEvent(me: MethodEvent, oll: Option[(Point2D.Double, Point2D.Double)]) = {
+    lazy val lastLine = oll
     val meDesc = me.toString
     val ended = me.ended
     val uiLevel = me.level + 1
@@ -85,6 +89,17 @@ class TracingGUI(scriptEditor: ScriptEditor, kojoCtx: core.KojoCtx) {
                 scriptEditor.markTraceLine(lineNum)
               else
                 scriptEditor.markTraceLine(me.callerLineNum)
+
+              currMarker foreach { _.erase }
+              kojoCtx.repaintCanvas()
+              lastLine foreach { ll =>
+                val pic = kojoCtx.picLine(ll._1, ll._2)
+                currMarker = Some(pic)
+                pic.draw()
+                pic.setPenColor(Color.black)
+                pic.setPenThickness(4)
+              }
+
             }
           })
         }
