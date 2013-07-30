@@ -82,7 +82,6 @@ object TracingBuiltins {
   val britMod = Utils.britMod _
   
   lazy val turtle0 = spriteCanvas.turtle0
-  var turtles = Vector[Turtle]()
   
   lazy val storyTeller = new StoryTeller(kojoCtx)
   def playMp3Loop(mp3File: String) {
@@ -149,17 +148,11 @@ object TracingBuiltins {
   /* turtle creation */
   
   def newTurtle(x: Double, y: Double): Turtle = {
-    var t0 = spriteCanvas.newTurtle(x, y, "/images/turtle32.png")
-    //var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, "/images/turtle32.png", x, y) 
-    turtles = turtles :+ t0
-    turtles.last
+    spriteCanvas.newTurtle(x, y, "/images/turtle32.png")
   }
   
   def newTurtle(x: Double, y: Double, str: String): Turtle = {
-        var t0 = spriteCanvas.newTurtle(x, y, str)
-    //var t0 = new net.kogics.kojo.turtle.Turtle(spriteCanvas, str, x, y) 
-    turtles = turtles :+ t0
-    turtles.last
+    spriteCanvas.newTurtle(x, y, str)
   }
   
   def runInBackground(code: => Unit) = Utils.runAsyncMonitored(code)
