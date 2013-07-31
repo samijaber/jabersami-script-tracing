@@ -65,13 +65,14 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var runningInBG = false
   val imgPath = "main/resources"
 
+  var currEvtVec = Vector[(String, Option[MethodEvent])](("main", None))
+
   val reporter = new Reporter {
     override def info0(position: Position, msg: String, severity: Severity, force: Boolean) {
       severity.count += 1
       println(msg)
     }
   }
-
   val compiler = new Global(settings, reporter)
   val tracingGUI = new TracingGUI(scriptEditor, builtins.kojoCtx)
   val lineNumOffset = 3
@@ -151,6 +152,11 @@ def main(args: Array[String]) {
     }
   }
 
+  def incrementCurrEvt(name: String) {
+    if (currEvtVec.indexWhere(x => x._1 == name) == -1)
+      currEvtVec = currEvtVec :+ (name, None)
+  }
+
   def trace(code: String) = Utils.runAsync {
     try {
       turtles = Vector[Turtle]()
@@ -181,27 +187,36 @@ def main(args: Array[String]) {
             evt match {
               case threadStartEvt: ThreadStartEvent =>
                 var name = threadStartEvt.thread().name
-                if (name.contains("Thread-"))
+                if (name.contains("Thread-")) {
                   createRequests(excludes, vm, threadStartEvt.thread())
+                  incrementCurrEvt(name)
+                }
               case methodEnterEvt: MethodEntryEvent =>
                 currThread = methodEnterEvt.thread()
-
+                val thread = currThread
                 if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
                   try {
-                    val frame = currThread.frame(0)
-                    val toprint =
-                      try {
-                        if (methodEnterEvt.method().arguments().size > 0)
-                          "(%s)" format methodEnterEvt.method.arguments.map { n =>
-                            val argval = frame.getValue(n)
-
-                            s"arg ${n.name}: ${n.typeName} = $argval"
-                          }.mkString(",")
-                        else "()"
-                      }
-                      catch {
-                        case e: AbsentInformationException => ""
-                      }
+                    val frame = methodEnterEvt.thread().frame(0)
+                    val toprint = try {
+                      if (methodEnterEvt.method().arguments().size > 0)
+                        "(%s)" format methodEnterEvt.method.arguments.map { n =>
+                          val frameVal = frame.getValue(n)
+                          val argval = if (frameVal.isInstanceOf[ObjectReference]) {
+                            val objRef = frameVal.asInstanceOf[ObjectReference]
+                            val mthd = objRef.referenceType.methodsByName("toString")(0)
+                            val rtrndValue = objRef.invokeMethod(currThread, mthd, new java.util.ArrayList, ObjectReference.INVOKE_SINGLE_THREADED)
+                            rtrndValue.asInstanceOf[StringReference].value()
+                          }
+                          else {
+                            frameVal
+                          }
+                          s"arg ${n.name}: ${n.typeName} = $argval"
+                        }.mkString(",")
+                      else "()"
+                    }
+                    catch {
+                      case e: AbsentInformationException => ""
+                    }
 
                     val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
                     var argList = List[LocalVariable]()
@@ -296,6 +311,7 @@ def main(args: Array[String]) {
     }
     catch {
       case t: Throwable => System.err.println(s"[Exception] -- ${t.getMessage}")
+      //t.printStackTrace()
     }
   }
 
@@ -309,24 +325,34 @@ def main(args: Array[String]) {
     }
   }
 
-  var currentMethodEvent: Option[MethodEvent] = None
+  def getCurrentMethodEvent: Option[MethodEvent] = try {
+    var name = currThread.name
+    var index = currEvtVec.indexWhere(evt => evt._1 == name)
+    currEvtVec(index)._2
+  }
+  catch {
+    case t: Throwable => println("could not find MethodEvent for thread " + currThread.name); None
+  }
+
   def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, source: String, callerSource: String, callerLine: String, callerLineNum: Int) {
     var newEvt = new MethodEvent()
+    var mthdEvent = getCurrentMethodEvent
+
     newEvt.entry = desc
     newEvt.entryLineNum = lineNum
     newEvt.setEntryVars(stkfrm, localArgs)
-    newEvt.setParent(currentMethodEvent)
+    newEvt.setParent(mthdEvent)
     newEvt.sourceName = source
     newEvt.callerSourceName = callerSource
     newEvt.callerLine = callerLine
     newEvt.callerLineNum = callerLineNum
     newEvt.methodName = name
-    currentMethodEvent = Some(newEvt)
+    mthdEvent = Some(newEvt)
     var ret: Option[(Point2D.Double, Point2D.Double)] = None
     if (isTurtle) {
       ret = runTurtleMethod(name, stkfrm, localArgs)
     }
-    tracingGUI.addEvent(currentMethodEvent.get, ret)
+    tracingGUI.addEvent(mthdEvent.get, ret)
 
   }
 
@@ -487,15 +513,16 @@ def main(args: Array[String]) {
   }
 
   def handleMethodExit(desc: String, isTurtle: Boolean, stkfrm: StackFrame, lineNum: Int, retVal: String) {
-    currentMethodEvent.foreach { ce =>
+    var mthdEvent = getCurrentMethodEvent
+    mthdEvent.foreach { ce =>
       ce.isOver()
       ce.exit = desc
       ce.exitLineNum = lineNum
       ce.returnVal = retVal
 
-      tracingGUI.addEvent(currentMethodEvent.get, None)
+      tracingGUI.addEvent(mthdEvent.get, None)
 
-      currentMethodEvent = ce.parent
+      mthdEvent = ce.parent
     }
   }
 
