@@ -200,6 +200,11 @@ def main(args: Array[String]) {
                     val toprint = try {
                       if (methodEnterEvt.method().arguments().size > 0)
                         "(%s)" format methodEnterEvt.method.arguments.map { n =>
+                          println("thread is " + thread.name() + " and method is " + methodEnterEvt.method().name())
+                          if (!thread.isSuspended())
+                          {
+                            println("the thread is not suspended!!")
+                          }
                           val frameVal = frame.getValue(n)
                           val argval = if (frameVal.isInstanceOf[ObjectReference]) {
                             val objRef = frameVal.asInstanceOf[ObjectReference]
@@ -333,6 +338,11 @@ def main(args: Array[String]) {
   catch {
     case t: Throwable => println("could not find MethodEvent for thread " + currThread.name); None
   }
+  
+  def updateMethodEventVector(newEvt: MethodEvent) {
+    var index = currEvtVec.indexWhere(evt => evt._1 == currThread.name)
+    currEvtVec = currEvtVec.updated(index, (currThread.name, Some(newEvt)))
+  }
 
   def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, source: String, callerSource: String, callerLine: String, callerLineNum: Int) {
     var newEvt = new MethodEvent()
@@ -347,7 +357,9 @@ def main(args: Array[String]) {
     newEvt.callerLine = callerLine
     newEvt.callerLineNum = callerLineNum
     newEvt.methodName = name
-    mthdEvent = Some(newEvt)
+    
+    updateMethodEventVector(newEvt)
+    
     var ret: Option[(Point2D.Double, Point2D.Double)] = None
     if (isTurtle) {
       ret = runTurtleMethod(name, stkfrm, localArgs)
