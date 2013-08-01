@@ -200,13 +200,9 @@ def main(args: Array[String]) {
                     val toprint = try {
                       if (methodEnterEvt.method().arguments().size > 0)
                         "(%s)" format methodEnterEvt.method.arguments.map { n =>
-                          println("thread is " + thread.name() + " and method is " + methodEnterEvt.method().name())
-                          if (!thread.isSuspended())
-                          {
-                            println("the thread is not suspended!!")
-                          }
                           val frameVal = frame.getValue(n)
-                          val argval = if (frameVal.isInstanceOf[ObjectReference]) {
+
+                          val argval = if (false) {
                             val objRef = frameVal.asInstanceOf[ObjectReference]
                             val mthd = objRef.referenceType.methodsByName("toString")(0)
                             val rtrndValue = objRef.invokeMethod(currThread, mthd, new java.util.ArrayList, ObjectReference.INVOKE_SINGLE_THREADED)
@@ -338,7 +334,7 @@ def main(args: Array[String]) {
   catch {
     case t: Throwable => println("could not find MethodEvent for thread " + currThread.name); None
   }
-  
+
   def updateMethodEventVector(newEvt: MethodEvent) {
     var index = currEvtVec.indexWhere(evt => evt._1 == currThread.name)
     currEvtVec = currEvtVec.updated(index, (currThread.name, Some(newEvt)))
@@ -357,14 +353,14 @@ def main(args: Array[String]) {
     newEvt.callerLine = callerLine
     newEvt.callerLineNum = callerLineNum
     newEvt.methodName = name
-    
+
     updateMethodEventVector(newEvt)
-    
+
     var ret: Option[(Point2D.Double, Point2D.Double)] = None
     if (isTurtle) {
       ret = runTurtleMethod(name, stkfrm, localArgs)
     }
-    tracingGUI.addEvent(mthdEvent.get, ret)
+    tracingGUI.addEvent(newEvt, ret)
 
   }
 
@@ -477,7 +473,7 @@ def main(args: Array[String]) {
         }
         else {
           val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
-          turtles = turtles :+ TSCanvas.newTurtle(x, y, str)
+          turtles = turtles :+ TSCanvas.newTurtle(x, y, str.slice(1, str.length-1))
         }
       case "changePosition" =>
         val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
@@ -535,6 +531,7 @@ def main(args: Array[String]) {
       tracingGUI.addEvent(mthdEvent.get, None)
 
       mthdEvent = ce.parent
+      updateMethodEventVector(ce)
     }
   }
 
