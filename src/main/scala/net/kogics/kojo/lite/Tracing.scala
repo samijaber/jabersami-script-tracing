@@ -66,6 +66,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   val imgPath = "main/resources"
 
   var currEvtVec = Vector[(String, Option[MethodEvent])](("main", None))
+  var CurrMthdEvtIndex: Int = -1
 
   val reporter = new Reporter {
     override def info0(position: Position, msg: String, severity: Severity, force: Boolean) {
@@ -161,6 +162,7 @@ def main(args: Array[String]) {
     try {
       turtles = Vector[Turtle]()
       turtlesRefs = Vector[Long]()
+      currEvtVec = Vector[(String, Option[MethodEvent])](("main", None))
 
       compile(code)
       //Connect to target VM
@@ -264,6 +266,7 @@ def main(args: Array[String]) {
                     //Vectors to keep track of new turtlesRefs
                     if (methodExitEvt.method.name == "newTurtle" && isFromWrapper(currThread.frame(0))) {
                       var ref = methodExitEvt.returnValue().asInstanceOf[ObjectReference].uniqueID()
+                      println("new turtle taken into account with ref: " + ref.toString)
                       turtlesRefs = turtlesRefs :+ ref
                     }
                     //determine if the method is a Turtle API method
@@ -326,6 +329,14 @@ def main(args: Array[String]) {
     }
   }
 
+  def getCurrMthdEvtIndex: Int = try {
+    var name = currThread.name
+    currEvtVec.indexWhere(evt => evt._1 == name)
+  }
+  catch {
+    case t: Throwable => println("could not find MethodEventIndex for thread " + currThread.name); -1
+  }
+
   def getCurrentMethodEvent: Option[MethodEvent] = try {
     var name = currThread.name
     var index = currEvtVec.indexWhere(evt => evt._1 == name)
@@ -335,15 +346,14 @@ def main(args: Array[String]) {
     case t: Throwable => println("could not find MethodEvent for thread " + currThread.name); None
   }
 
-  def updateMethodEventVector(newEvt: MethodEvent) {
+  def updateMethodEventVector(newEvt: Option[MethodEvent]) {
     var index = currEvtVec.indexWhere(evt => evt._1 == currThread.name)
-    currEvtVec = currEvtVec.updated(index, (currThread.name, Some(newEvt)))
+    currEvtVec = currEvtVec.updated(index, (currThread.name, newEvt))
   }
 
   def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, source: String, callerSource: String, callerLine: String, callerLineNum: Int) {
     var newEvt = new MethodEvent()
     var mthdEvent = getCurrentMethodEvent
-
     newEvt.entry = desc
     newEvt.entryLineNum = lineNum
     newEvt.setEntryVars(stkfrm, localArgs)
@@ -354,14 +364,28 @@ def main(args: Array[String]) {
     newEvt.callerLineNum = callerLineNum
     newEvt.methodName = name
 
-    updateMethodEventVector(newEvt)
+    updateMethodEventVector(Some(newEvt))
 
     var ret: Option[(Point2D.Double, Point2D.Double)] = None
     if (isTurtle) {
       ret = runTurtleMethod(name, stkfrm, localArgs)
     }
     tracingGUI.addEvent(newEvt, ret)
+  }
 
+  def handleMethodExit(desc: String, isTurtle: Boolean, stkfrm: StackFrame, lineNum: Int, retVal: String) {
+    var mthdEvent = getCurrentMethodEvent
+    mthdEvent.foreach { ce =>
+      ce.isOver()
+      ce.exit = desc
+      ce.exitLineNum = lineNum
+      ce.returnVal = retVal
+
+      tracingGUI.addEvent(ce, None)
+
+      mthdEvent = ce.parent
+    }
+    updateMethodEventVector(mthdEvent)
   }
 
   def isFromWrapper(stkfrm: StackFrame): Boolean = { stkfrm.thisObject().toString().contains("TracingBuiltins") }
@@ -473,7 +497,7 @@ def main(args: Array[String]) {
         }
         else {
           val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
-          turtles = turtles :+ TSCanvas.newTurtle(x, y, str.slice(1, str.length-1))
+          turtles = turtles :+ TSCanvas.newTurtle(x, y, str.slice(1, str.length - 1))
         }
       case "changePosition" =>
         val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
@@ -518,21 +542,6 @@ def main(args: Array[String]) {
     var alpha = alphaValue.asInstanceOf[IntegerValue].value
 
     new Color(rgb(0), rgb(1), rgb(2), alpha)
-  }
-
-  def handleMethodExit(desc: String, isTurtle: Boolean, stkfrm: StackFrame, lineNum: Int, retVal: String) {
-    var mthdEvent = getCurrentMethodEvent
-    mthdEvent.foreach { ce =>
-      ce.isOver()
-      ce.exit = desc
-      ce.exitLineNum = lineNum
-      ce.returnVal = retVal
-
-      tracingGUI.addEvent(mthdEvent.get, None)
-
-      mthdEvent = ce.parent
-      updateMethodEventVector(ce)
-    }
   }
 
   def WatchThreadStarts() {
