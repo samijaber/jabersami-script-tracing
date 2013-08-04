@@ -11,10 +11,11 @@ import lite.canvas.SpriteCanvas
 import net.kogics.kojo.turtle.Turtle
 import net.kogics.kojo.story.StoryTeller
 
-object TracingBuiltins {
+object TracingBuiltins extends RichTurtleCommands {
   
-  lazy val kojoCtx = new NoOpKojoCtx
-  lazy val spriteCanvas = new SpriteCanvas(kojoCtx)
+//  lazy val kojoCtx = new NoOpKojoCtx
+//  lazy val spriteCanvas = new SpriteCanvas(kojoCtx)
+  lazy val spriteCanvas = new NoOpSCanvas
     
   type Turtle = core.Turtle
   type Color = java.awt.Color
@@ -83,9 +84,7 @@ object TracingBuiltins {
   
   lazy val turtle0 = spriteCanvas.turtle0
   
-  lazy val storyTeller = new StoryTeller(kojoCtx)
   def playMp3Loop(mp3File: String) {
-    storyTeller.playMp3Loop(mp3File)
   }
   
   def color(R: Int, B: Int, G: Int): Color = new Color(R,B,G)
@@ -100,14 +99,10 @@ object TracingBuiltins {
   def cleari(){}
   def invisible(){}
   def forward(n: Double) {}
+  def forward(): Unit = forward(25)
+  def back(): Unit = back(25)
   def circle(r: Double) {}
-  def right() {}
-  def right(n: Double) {}
-  def left() {}
-  def left(n: Double) {}
   def turn(n: Double) {}
-  def back() {}
-  def back(n: Double) {}
   def home() {}
   def jumpTo(x: Double, y: Double) {}
   def moveTo(x: Double, y: Double) {}
@@ -143,17 +138,21 @@ object TracingBuiltins {
   def zoom(x: Double, y: Double, z: Double) {}
   
   
-  def stopActivity() = kojoCtx.stopActivity()
+  def stopActivity() = {}
   def pause(secs: Double) = Thread.sleep((secs * 1000).toLong)
   /* turtle creation */
   
-  def newTurtle(x: Double, y: Double): Turtle = {
-    spriteCanvas.newTurtle(x, y, "/images/turtle32.png")
+  def newTurtle(x: Double, y: Double): core.Turtle = {
+    newTurtle(x, y, "/images/turtle32.png")
   }
   
-  def newTurtle(x: Double, y: Double, str: String): Turtle = {
-    spriteCanvas.newTurtle(x, y, str)
+  def newTurtle(x: Double, y: Double, costume: String): core.Turtle = {
+    new net.kogics.kojo.turtle.Turtle(spriteCanvas, costume, x, y) {
+        override def act(fn: Turtle => Unit) {
+          fn(this)
+        }
+    }
   }
   
-  def runInBackground(code: => Unit) = Utils.runAsyncMonitored(code)
+  def runInBackground(code: => Unit) { code }
 }

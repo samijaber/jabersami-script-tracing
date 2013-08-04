@@ -22,6 +22,7 @@ import java.lang.reflect.InvocationTargetException
 
 import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.mutable.HashMap
 import scala.reflect.internal.util.BatchSourceFile
 import scala.reflect.internal.util.Position
 import scala.tools.nsc.Global
@@ -39,6 +40,7 @@ import com.sun.jdi.ObjectReference
 import com.sun.jdi.StackFrame
 import com.sun.jdi.StringReference
 import com.sun.jdi.ThreadReference
+import com.sun.jdi.Value
 import com.sun.jdi.VirtualMachine
 import com.sun.jdi.connect.Connector
 import com.sun.jdi.connect.LaunchingConnector
@@ -60,10 +62,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var mainThread: ThreadReference = _
   val tmpdir = System.getProperty("java.io.tmpdir")
   val settings = makeSettings()
-  var turtles = Vector[Turtle]()
-  var turtlesRefs = Vector[Long]()
-  var runningInBG = false
-  val imgPath = "main/resources"
+  val turtles = new HashMap[Long, Turtle]
 
   var currEvtVec = Vector[(String, Option[MethodEvent])](("main", None))
   var CurrMthdEvtIndex: Int = -1
@@ -160,8 +159,7 @@ def main(args: Array[String]) {
 
   def trace(code: String) = Utils.runAsync {
     try {
-      turtles = Vector[Turtle]()
-      turtlesRefs = Vector[Long]()
+      turtles.clear()
       currEvtVec = Vector[(String, Option[MethodEvent])](("main", None))
 
       compile(code)
@@ -170,7 +168,7 @@ def main(args: Array[String]) {
       println("Attached to process '" + vm.name + "'")
 
       //Create Event Requests
-      val excludes = Array("java.*", "javax.*", "sun.*", "com.sun.*", "com.apple.*")
+      val excludes = Array("java.*", "javax.*", "sun.*", "com.sun.*", "com.apple.*", "edu.umd.cs.piccolo.*")
       mainThread = getThread(vm, "main")
       currThread = getThread(vm, "main")
       createRequests(excludes, vm, mainThread);
@@ -222,9 +220,9 @@ def main(args: Array[String]) {
                     }
 
                     val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
-                    var argList = List[LocalVariable]()
-                    try { argList = methodEnterEvt.method.arguments.toList }
-                    catch { case e: AbsentInformationException => }
+
+                    val argList = try { methodEnterEvt.method.arguments.toList }
+                    catch { case e: AbsentInformationException => List[LocalVariable]() }
 
                     val callerSrcName = try { currThread.frame(1).location.sourceName }
                     catch { case _: Throwable => "N/A" }
@@ -263,35 +261,19 @@ def main(args: Array[String]) {
                 if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
                   try {
                     currThread = methodExitEvt.thread()
-                    //Vectors to keep track of new turtlesRefs
-                    if (methodExitEvt.method.name == "newTurtle" && isFromWrapper(currThread.frame(0))) {
-                      var ref = methodExitEvt.returnValue().asInstanceOf[ObjectReference].uniqueID()
-                      println("new turtle taken into account with ref: " + ref.toString)
-                      turtlesRefs = turtlesRefs :+ ref
-                    }
-                    //determine if the method is a Turtle API method
-                    if (turtleMethods contains methodExitEvt.method.name) {
-                      val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                      handleMethodExit(
-                        desc,
-                        true,
-                        currThread.frame(0),
-                        currThread.frame(1).location.lineNumber - lineNumOffset,
-                        methodExitEvt.returnValue.toString
-                      )
-                    }
-                    else {
-                      val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
-                      def rtrnVal: String = { if (methodExitEvt.returnValue() == null) "" else methodExitEvt.returnValue.toString }
+                    val desc = s"[Method Exit] ${methodExitEvt.method().name}(return value): " + methodExitEvt.returnValue
+                    val argList = try { methodExitEvt.method.arguments.toList }
+                    catch { case e: AbsentInformationException => List[LocalVariable]() }
 
-                      handleMethodExit(
-                        desc,
-                        false,
-                        currThread.frame(0),
-                        methodExitEvt.location.lineNumber - lineNumOffset,
-                        rtrnVal
-                      )
-                    }
+                    handleMethodExit(
+                      methodExitEvt.method.name,
+                      desc,
+                      turtleMethods contains methodExitEvt.method.name,
+                      currThread.frame(0),
+                      argList,
+                      methodExitEvt.location.lineNumber - lineNumOffset,
+                      methodExitEvt.returnValue
+                    )
                   }
                   catch {
                     case t: Throwable =>
@@ -373,13 +355,16 @@ def main(args: Array[String]) {
     tracingGUI.addEvent(newEvt, ret)
   }
 
-  def handleMethodExit(desc: String, isTurtle: Boolean, stkfrm: StackFrame, lineNum: Int, retVal: String) {
+  def handleMethodExit(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, retVal: Value) {
+    def retValStr: String = { if (retVal == null) "" else retVal.toString }
+    runTurtleMethod2(name, stkfrm, localArgs, retVal)
+
     var mthdEvent = getCurrentMethodEvent
     mthdEvent.foreach { ce =>
       ce.isOver()
       ce.exit = desc
       ce.exitLineNum = lineNum
-      ce.returnVal = retVal
+      ce.returnVal = retValStr
 
       tracingGUI.addEvent(ce, None)
 
@@ -388,34 +373,25 @@ def main(args: Array[String]) {
     updateMethodEventVector(mthdEvent)
   }
 
-  def isFromWrapper(stkfrm: StackFrame): Boolean = { stkfrm.thisObject().toString().contains("TracingBuiltins") }
-
   def runTurtleMethod(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable]): Option[(Point2D.Double, Point2D.Double)] = {
-    var ret: Option[(Point2D.Double, Point2D.Double)] = None
-    if (stkfrm.thisObject() == null) break;
-    var stdTurtle = if (name == "newTurtle") true else isFromWrapper(stkfrm)
+    if (stkfrm.thisObject() == null) return None
+
     import builtins.Tw
     import builtins.TSCanvas
-    var turtle: Turtle = Tw.getTurtle
-    if (!stdTurtle) {
-      var caller = stkfrm.thisObject().uniqueID()
-      var index = turtlesRefs.indexOf(caller)
-      if (index != -1)
-        turtle = turtles(index)
+    var ret: Option[(Point2D.Double, Point2D.Double)] = None
+
+    val turtle = {
+      val caller = stkfrm.thisObject().uniqueID()
+      //    if (turtles.contains(caller)) {
+      //      println(s"$name call for turtle with id: $caller")
+      //    }
+      //    else {
+      //      println(s"$name call for default turtle")
+      //    }
+      turtles.getOrElse(caller, Tw.getTurtle)
     }
 
     name match {
-      /*
-      case "right" | "left"=>
-        val method = Tw.getClass().getMethod(name)
-        if (localArgs.length == 0) {
-          method.invoke(Tw.getClass().newInstance())
-        }
-        else {
-          val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
-          method.invoke(Tw.getClass().newInstance(), angle: java.lang.Double)
-        }
-        */
       case "clear" =>
         TSCanvas.clear()
       case "cleari" =>
@@ -423,39 +399,17 @@ def main(args: Array[String]) {
       case "invisible" =>
         turtle.invisible
       case "forward" =>
-        val step = stkfrm.getValue(localArgs(0)).toString.toDouble
-        turtle.forward(step)
-        ret = Some(turtle.lastLine)
-      case "right" =>
-        if (!stdTurtle) {
-          //do nothing
-        }
-        else if (stdTurtle && localArgs.length == 0) {
-          turtle.right()
-        }
-        else {
-          val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
-          turtle.right(angle)
-        }
-      case "left" =>
-        if (!stdTurtle) {
-          //do nothing
-        }
-        else if (stdTurtle && localArgs.length == 0) {
-          turtle.left()
-        }
-        else {
-          val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
-          turtle.left(angle)
+        if (localArgs.length == 1) {
+          val step = stkfrm.getValue(localArgs(0)).toString.toDouble
+          turtle.forward(step)
+          ret = Some(turtle.lastLine)
         }
       case "turn" =>
         val angle = stkfrm.getValue(localArgs(0)).toString.toDouble
         turtle.turn(angle)
-      case "back" =>
-        val step = stkfrm.getValue(localArgs(0)).toString.toDouble
-        if (stdTurtle) {
-          turtle.back(step)
-        }
+      case "right" =>
+      case "left"  =>
+      case "back"  =>
       case "home" =>
         turtle.home
       case "jumpTo" =>
@@ -491,14 +445,7 @@ def main(args: Array[String]) {
       case "restorePosHe" =>
         turtle.restorePosHe
       case "newTurtle" =>
-        if (localArgs.length == 2) {
-          val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
-          turtles = turtles :+ TSCanvas.newTurtle(x, y)
-        }
-        else {
-          val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
-          turtles = turtles :+ TSCanvas.newTurtle(x, y, str.slice(1, str.length - 1))
-        }
+      // handled on the exit event
       case "changePosition" =>
         val (x, y) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble)
         turtle.changePosition(x, y)
@@ -525,6 +472,22 @@ def main(args: Array[String]) {
       case _ =>
     }
     ret
+  }
+
+  def runTurtleMethod2(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable], retVal: Value) {
+    import builtins.TSCanvas
+    name match {
+      case "newTurtle" =>
+        if (localArgs.length == 3) {
+          val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
+          val newTurtle = TSCanvas.newTurtle(x, y, str.slice(1, str.length - 1))
+          val ref = retVal.asInstanceOf[ObjectReference].uniqueID()
+//          println(s"New turtle $ref mapped")
+          turtles(ref) = newTurtle
+        }
+
+      case _ =>
+    }
   }
 
   def getColor(stkfrm: StackFrame, localArgs: List[LocalVariable]): Color = {
