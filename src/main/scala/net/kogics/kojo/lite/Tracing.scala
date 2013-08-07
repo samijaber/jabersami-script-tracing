@@ -33,6 +33,7 @@ import scala.util.control.Breaks.breakable
 import scala.util.matching.Regex
 
 import com.sun.jdi.AbsentInformationException
+import com.sun.jdi.ArrayReference
 import com.sun.jdi.Bootstrap
 import com.sun.jdi.IntegerValue
 import com.sun.jdi.LocalVariable
@@ -193,19 +194,20 @@ def main(args: Array[String]) {
                 }
               case methodEnterEvt: MethodEntryEvent =>
                 currThread = methodEnterEvt.thread()
-                val thread = currThread
                 if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
                   try {
-                    val frame = methodEnterEvt.thread().frame(0)
                     val toprint = try {
-                      if (methodEnterEvt.method().arguments().size > 0)
+                      if (methodEnterEvt.method.arguments.size > 0)
                         "(%s)" format methodEnterEvt.method.arguments.map { n =>
+                          val frame = methodEnterEvt.thread.frame(0)
                           val frameVal = frame.getValue(n)
 
-                          val argval = if (false) {
+                          val argval = if (frameVal.isInstanceOf[ObjectReference] &&
+                            !frameVal.isInstanceOf[StringReference] &&
+                            !frameVal.isInstanceOf[ArrayReference]) {
                             val objRef = frameVal.asInstanceOf[ObjectReference]
                             val mthd = objRef.referenceType.methodsByName("toString")(0)
-                            val rtrndValue = objRef.invokeMethod(currThread, mthd, new java.util.ArrayList, ObjectReference.INVOKE_SINGLE_THREADED)
+                            val rtrndValue = objRef.invokeMethod(currThread, mthd, new java.util.ArrayList, 0)
                             rtrndValue.asInstanceOf[StringReference].value()
                           }
                           else {
@@ -482,7 +484,7 @@ def main(args: Array[String]) {
           val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
           val newTurtle = TSCanvas.newTurtle(x, y, str.slice(1, str.length - 1))
           val ref = retVal.asInstanceOf[ObjectReference].uniqueID()
-//          println(s"New turtle $ref mapped")
+          //          println(s"New turtle $ref mapped")
           turtles(ref) = newTurtle
         }
 
