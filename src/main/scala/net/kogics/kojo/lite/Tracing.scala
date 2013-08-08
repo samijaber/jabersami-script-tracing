@@ -86,6 +86,7 @@ def main(args: Array[String]) {
 } 
 """
 
+    
   def stop() {
     currThread.virtualMachine().exit(1)
   }
