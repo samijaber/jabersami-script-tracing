@@ -19,7 +19,6 @@ import java.awt.Color
 import java.awt.geom.Point2D
 import java.io.File
 import java.lang.reflect.InvocationTargetException
-
 import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.mutable.HashMap
@@ -31,7 +30,6 @@ import scala.tools.nsc.reporters.Reporter
 import scala.util.control.Breaks.break
 import scala.util.control.Breaks.breakable
 import scala.util.matching.Regex
-
 import com.sun.jdi.AbsentInformationException
 import com.sun.jdi.ArrayReference
 import com.sun.jdi.Bootstrap
@@ -53,9 +51,9 @@ import com.sun.jdi.event.VMDeathEvent
 import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.request.EventRequest
-
 import net.kogics.kojo.core.Turtle
 import net.kogics.kojo.util.Utils
+import com.sun.jdi.InvocationException
 
 class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
@@ -64,6 +62,7 @@ class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   val tmpdir = System.getProperty("java.io.tmpdir")
   val settings = makeSettings()
   val turtles = new HashMap[Long, Turtle]
+  var evtReqs = Vector[EventRequest]()
 
   var currEvtVec = Vector[(String, Option[MethodEvent])](("main", None))
   var CurrMthdEvtIndex: Int = -1
@@ -154,10 +153,6 @@ def main(args: Array[String]) {
     }
   }
 
-  def incrementCurrEvt(name: String) {
-    if (currEvtVec.indexWhere(x => x._1 == name) == -1)
-      currEvtVec = currEvtVec :+ (name, None)
-  }
 
   def trace(code: String) = Utils.runAsync {
     try {
@@ -208,7 +203,18 @@ def main(args: Array[String]) {
                             !frameVal.isInstanceOf[ArrayReference]) {
                             val objRef = frameVal.asInstanceOf[ObjectReference]
                             val mthd = objRef.referenceType.methodsByName("toString")(0)
-                            val rtrndValue = objRef.invokeMethod(currThread, mthd, new java.util.ArrayList, 0)
+                            println("getting argval")
+                            
+                            evtReqs.foreach(x => x.disable)
+                            val rtrndValue = try {objRef.invokeMethod(currThread, mthd, new java.util.ArrayList, 0)}
+                            catch {
+                              case inv: InvocationException => 
+                                println("error in invokeMethod")
+                                inv.printStackTrace()
+                            }
+                            evtReqs.foreach(x => x.enable)
+                            
+                            println("Argval done")
                             rtrndValue.asInstanceOf[StringReference].value()
                           }
                           else {
@@ -219,7 +225,7 @@ def main(args: Array[String]) {
                       else "()"
                     }
                     catch {
-                      case e: AbsentInformationException => ""
+                      case e: AbsentInformationException => "There is an AbsentInformationException"
                     }
 
                     val desc = s"[Method Enter] ${methodEnterEvt.method.name}$toprint"
@@ -253,7 +259,6 @@ def main(args: Array[String]) {
                     )
                   }
                   catch {
-                    case inv: InvocationTargetException => println(inv.printStackTrace())
                     case t: Throwable =>
                       println(t.printStackTrace())
                     //println(s"[Exception] [Method Enter] [${t.getClass()}] ${methodEnterEvt.method.name} -- ${t.getMessage}")
@@ -328,12 +333,20 @@ def main(args: Array[String]) {
     currEvtVec(index)._2
   }
   catch {
-    case t: Throwable => println("could not find MethodEvent for thread " + currThread.name); None
+    case t: Throwable => 
+      println("could not find MethodEvent for thread " + currThread.name + ". Created one")
+      incrementCurrEvt(currThread.name)
+      currEvtVec.last._2
   }
 
   def updateMethodEventVector(newEvt: Option[MethodEvent]) {
     var index = currEvtVec.indexWhere(evt => evt._1 == currThread.name)
     currEvtVec = currEvtVec.updated(index, (currThread.name, newEvt))
+  }
+  
+  def incrementCurrEvt(name: String) {
+    if (currEvtVec.indexWhere(x => x._1 == name) == -1)
+      currEvtVec = currEvtVec :+ (name, None)
   }
 
   def handleMethodEntry(name: String, desc: String, isTurtle: Boolean, stkfrm: StackFrame, localArgs: List[LocalVariable], lineNum: Int, source: String, callerSource: String, callerLine: String, callerLineNum: Int) {
@@ -478,9 +491,9 @@ def main(args: Array[String]) {
   }
 
   def runTurtleMethod2(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable], retVal: Value) {
-    import builtins.TSCanvas
     name match {
       case "newTurtle" =>
+      import builtins.TSCanvas
         if (localArgs.length == 3) {
           val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
           val newTurtle = TSCanvas.newTurtle(x, y, str.slice(1, str.length - 1))
@@ -517,6 +530,7 @@ def main(args: Array[String]) {
     thrdStartVal.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     //thrdStartVal.addThreadFilter(mainThread)
     thrdStartVal.enable()
+    evtReqs = evtReqs :+ thrdStartVal
   }
 
   def createRequests(excludes: Array[String], vm: VirtualMachine, thread: ThreadReference) {
@@ -527,12 +541,14 @@ def main(args: Array[String]) {
     mthdEnterVal.addThreadFilter(thread)
     mthdEnterVal.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     mthdEnterVal.enable()
+    evtReqs = evtReqs :+ mthdEnterVal
 
     val mthdExitVal = evtReqMgr.createMethodExitRequest()
     excludes.foreach { mthdExitVal.addClassExclusionFilter(_) }
     mthdExitVal.addThreadFilter(thread)
     mthdExitVal.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     mthdExitVal.enable()
+    evtReqs = evtReqs :+ mthdExitVal
   }
 
 }
