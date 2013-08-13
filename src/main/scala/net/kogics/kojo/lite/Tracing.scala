@@ -18,7 +18,7 @@ package net.kogics.kojo.lite
 import java.awt.Color
 import java.awt.geom.Point2D
 import java.io.File
-import java.lang.reflect.InvocationTargetException
+
 import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.mutable.HashMap
@@ -30,10 +30,12 @@ import scala.tools.nsc.reporters.Reporter
 import scala.util.control.Breaks.break
 import scala.util.control.Breaks.breakable
 import scala.util.matching.Regex
+
 import com.sun.jdi.AbsentInformationException
 import com.sun.jdi.ArrayReference
 import com.sun.jdi.Bootstrap
 import com.sun.jdi.IntegerValue
+import com.sun.jdi.InvocationException
 import com.sun.jdi.LocalVariable
 import com.sun.jdi.ObjectReference
 import com.sun.jdi.StackFrame
@@ -51,9 +53,14 @@ import com.sun.jdi.event.VMDeathEvent
 import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.request.EventRequest
+
 import net.kogics.kojo.core.Turtle
 import net.kogics.kojo.util.Utils
-import com.sun.jdi.InvocationException
+
+import javax.swing.JFrame
+import javax.swing.JScrollPane
+import javax.swing.JTree
+import javax.swing.tree.DefaultMutableTreeNode
 
 class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
@@ -85,7 +92,6 @@ def main(args: Array[String]) {
 } 
 """
 
-    
   def stop() {
     currThread.virtualMachine().exit(1)
   }
@@ -137,7 +143,7 @@ def main(args: Array[String]) {
   }
 
   val ignoreMethods = Set("main", "<init>", "<clinit>", "$init$", "repeat", "repeatWhile", "runInBackground")
-  val turtleMethods = Set("setBackground", "color", "forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes", "axesOn", "axesOff", "gridOn", "gridOff", "zoom")
+  val turtleMethods = Set("setBackground", "color", "forward", "right", "left", "turn", "clear", "cleari", "invisible", "jumpTo", "back", "setPenColor", "setFillColor", "setAnimationDelay", "setPenThickness", "penDown", "penUp", "circle", "savePosHe", "restorePosHe", "newTurtle", "changePosition", "scaleCostume", "setCostumes", "axesOn", "axesOff", "gridOn", "gridOff", "zoom", "inspectx")
 
   def getThread(vm: VirtualMachine, name: String): ThreadReference = {
     try {
@@ -153,6 +159,36 @@ def main(args: Array[String]) {
     }
   }
 
+  def inspect(obj: Value, name: String) {
+    var root = new DefaultMutableTreeNode(obj)
+
+    val panel = new JFrame("Object Inspection") {
+      val subRoot = new DefaultMutableTreeNode("information about root")
+      root.add(subRoot)
+
+      val nameNode = new DefaultMutableTreeNode(name)
+      subRoot add nameNode
+
+      val id = System.identityHashCode(obj).toString
+      val idNode = new DefaultMutableTreeNode(id)
+      subRoot add idNode
+
+      subRoot add new DefaultMutableTreeNode(obj.`type`.toString)
+      
+      val children = new DefaultMutableTreeNode("children")
+      root.add(children)
+      
+      //incomplete case
+      //if (obj.isInstanceOf[Iterable[_]]) {}
+
+      var tree = new JTree(root)
+      var view = new JScrollPane(tree)
+
+      getContentPane add view
+      setVisible(true)
+    }
+
+  }
 
   def trace(code: String) = Utils.runAsync {
     try {
@@ -189,11 +225,19 @@ def main(args: Array[String]) {
                   incrementCurrEvt(name)
                 }
               case methodEnterEvt: MethodEntryEvent =>
+                println("Method entered: " + methodEnterEvt.method().name())
+                if (methodEnterEvt.method.name == "main") {
+                  println("main method was exited. Events left are:")
+                  evtReqs.foreach(evt =>
+                    println("event is enabled? " + evt.isEnabled + ". and is " + evt)
+                  )
+                }
+                evtReqs.foreach(x => x.disable)
                 currThread = methodEnterEvt.thread()
                 if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
                   try {
                     val toprint = try {
-                      if (methodEnterEvt.method.arguments.size > 0)
+                      if (false /*methodEnterEvt.method.arguments.size > 0*/ )
                         "(%s)" format methodEnterEvt.method.arguments.map { n =>
                           val frame = methodEnterEvt.thread.frame(0)
                           val frameVal = frame.getValue(n)
@@ -201,25 +245,31 @@ def main(args: Array[String]) {
                           val argval = if (frameVal.isInstanceOf[ObjectReference] &&
                             !frameVal.isInstanceOf[StringReference] &&
                             !frameVal.isInstanceOf[ArrayReference]) {
+                            println("getting argval")
                             val objRef = frameVal.asInstanceOf[ObjectReference]
                             val mthd = objRef.referenceType.methodsByName("toString")(0)
-                            println("getting argval")
-                            
-                            evtReqs.foreach(x => x.disable)
-                            val rtrndValue = try {objRef.invokeMethod(currThread, mthd, new java.util.ArrayList, 0)}
-                            catch {
-                              case inv: InvocationException => 
-                                println("error in invokeMethod")
-                                inv.printStackTrace()
+
+                            val rtrndValue = try {
+                              var objVal = objRef.invokeMethod(currThread, mthd, new java.util.ArrayList, 0)
+                              objVal.asInstanceOf[StringReference].value()
                             }
-                            evtReqs.foreach(x => x.enable)
-                            
-                            println("Argval done")
-                            rtrndValue.asInstanceOf[StringReference].value()
+                            catch {
+                              case inv: InvocationException =>
+                                println("[Exception] error in invokeMethod/target VM")
+                                //inv.printStackTrace()
+                                frameVal
+                              case illArg: IllegalArgumentException =>
+                                println("[Exception] invokeMethod to toString expected arguments")
+                                frameVal
+                              case _: Throwable =>
+                                println("[Exception] other invokeMethod error")
+                                frameVal
+                            }
                           }
                           else {
                             frameVal
                           }
+                          println("Argval done")
                           s"arg ${n.name}: ${n.typeName} = $argval"
                         }.mkString(",")
                       else "()"
@@ -257,6 +307,7 @@ def main(args: Array[String]) {
                       callerLine,
                       callerLineNum
                     )
+                    println("Method entered done: " + methodEnterEvt.method().name())
                   }
                   catch {
                     case t: Throwable =>
@@ -264,8 +315,15 @@ def main(args: Array[String]) {
                     //println(s"[Exception] [Method Enter] [${t.getClass()}] ${methodEnterEvt.method.name} -- ${t.getMessage}")
                   }
                 }
-
+                evtReqs.foreach(x => x.enable)
               case methodExitEvt: MethodExitEvent =>
+                println("Method exit: " + methodExitEvt.method.name)
+                if (methodExitEvt.method.name == "main") {
+                  println("main method was exited. Events left are:")
+                  evtReqs.foreach(evt =>
+                    println("event is enabled? " + evt.isEnabled + ". and is " + evt)
+                  )
+                }
                 if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
                   try {
                     currThread = methodExitEvt.thread()
@@ -282,6 +340,7 @@ def main(args: Array[String]) {
                       methodExitEvt.location.lineNumber - lineNumOffset,
                       methodExitEvt.returnValue
                     )
+                    println("Method exit evt done: " + methodExitEvt.method().name())
                   }
                   catch {
                     case t: Throwable =>
@@ -333,7 +392,7 @@ def main(args: Array[String]) {
     currEvtVec(index)._2
   }
   catch {
-    case t: Throwable => 
+    case t: Throwable =>
       println("could not find MethodEvent for thread " + currThread.name + ". Created one")
       incrementCurrEvt(currThread.name)
       currEvtVec.last._2
@@ -343,7 +402,7 @@ def main(args: Array[String]) {
     var index = currEvtVec.indexWhere(evt => evt._1 == currThread.name)
     currEvtVec = currEvtVec.updated(index, (currThread.name, newEvt))
   }
-  
+
   def incrementCurrEvt(name: String) {
     if (currEvtVec.indexWhere(x => x._1 == name) == -1)
       currEvtVec = currEvtVec :+ (name, None)
@@ -408,6 +467,10 @@ def main(args: Array[String]) {
     }
 
     name match {
+      case "inspectx" =>
+        val obj = stkfrm.getValue(localArgs(0))
+        val x = stkfrm.getValue(localArgs(1)).toString
+        inspect(obj, x)
       case "clear" =>
         TSCanvas.clear()
       case "cleari" =>
@@ -493,7 +556,7 @@ def main(args: Array[String]) {
   def runTurtleMethod2(name: String, stkfrm: StackFrame, localArgs: List[LocalVariable], retVal: Value) {
     name match {
       case "newTurtle" =>
-      import builtins.TSCanvas
+        import builtins.TSCanvas
         if (localArgs.length == 3) {
           val (x, y, str) = (stkfrm.getValue(localArgs(0)).toString.toDouble, stkfrm.getValue(localArgs(1)).toString.toDouble, stkfrm.getValue(localArgs(2)).toString)
           val newTurtle = TSCanvas.newTurtle(x, y, str.slice(1, str.length - 1))
