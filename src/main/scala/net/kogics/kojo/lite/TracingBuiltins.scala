@@ -4,11 +4,11 @@ package lite
 import java.awt.{ Color => JColor }
 import java.awt.{ Font => JFont }
 import java.awt.Paint
+import java.lang.reflect.Modifier
 
 import net.kogics.kojo.core.RichTurtleCommands
 import net.kogics.kojo.util.Utils
 
-import javax.swing.JButton
 import javax.swing.JFrame
 import javax.swing.JScrollPane
 import javax.swing.JTree
@@ -28,7 +28,67 @@ object TracingBuiltins extends RichTurtleCommands {
   )
 
   def inspectx[T](obj: T, name: String) {}
-  def inspect[T](obj: T) { inspectx(obj, obj.toString) }
+  //def inspect[T](obj: T) { inspectx(obj, obj.toString) }
+
+  //def getType[T: TypeTag](obj : T) = typeTag[T]
+  def inspect[T](obj: T, root: DefaultMutableTreeNode) {
+
+  }
+  def addChildren[T](obj: T, node: DefaultMutableTreeNode, depth: Int) {
+    val staticFields = new DefaultMutableTreeNode("Static Fields")
+    val inStaticFields = new DefaultMutableTreeNode("InStaticFields")
+    val inFields = new DefaultMutableTreeNode("InFields")
+    node.add(staticFields)
+    node.add(inStaticFields)
+    node.add(inFields)
+    val fields = obj.getClass().getDeclaredFields()
+    fields.foreach { field =>
+      field.setAccessible(true)
+      val fieldNode = new DefaultMutableTreeNode(field + " = " + field.get(obj).toString)
+      if (Modifier.isStatic(field.getModifiers)) {
+        staticFields add fieldNode
+      }
+      else {
+        node add fieldNode
+      }
+      
+      //depth condition only to find out why nothing is showing up 
+      if (depth < 3) { 
+        addChildren(field.get(obj), fieldNode, depth + 1) }
+    }
+    var superClass = obj.getClass().getSuperclass
+    while (superClass != null) {
+      val fields = superClass.getDeclaredFields()
+      fields.foreach { field =>
+        field.setAccessible(true);
+        val fieldNode = new DefaultMutableTreeNode(field + " = " + field.get(obj).toString)
+        if (Modifier.isStatic(field.getModifiers)) {
+          inStaticFields add fieldNode
+        }
+        else {
+          inFields add fieldNode
+        }
+        //  addChildren(field.get(obj), fieldNode)
+      }
+      superClass = superClass.getSuperclass
+    }
+
+  }
+
+  def inspect[T](obj: T) {
+    val root = new DefaultMutableTreeNode(obj)
+    addChildren(obj, root, 0)
+
+    val panel = new JFrame("Object Inspection") {
+      var tree = new JTree(root)
+      var view = new JScrollPane(tree)
+
+      getContentPane add view
+      setVisible(true)
+    }
+
+  }
+
   //  lazy val kojoCtx = new NoOpKojoCtx
   //  lazy val spriteCanvas = new SpriteCanvas(kojoCtx)
   lazy val spriteCanvas = new NoOpSCanvas
