@@ -30,10 +30,6 @@ object TracingBuiltins extends RichTurtleCommands {
   def inspectx[T](obj: T, name: String) {}
   //def inspect[T](obj: T) { inspectx(obj, obj.toString) }
 
-  //def getType[T: TypeTag](obj : T) = typeTag[T]
-  def inspect[T](obj: T, root: DefaultMutableTreeNode) {
-
-  }
   def addChildren[T](obj: T, node: DefaultMutableTreeNode, depth: Int) {
     val staticFields = new DefaultMutableTreeNode("Static Fields")
     val inStaticFields = new DefaultMutableTreeNode("InStaticFields")
@@ -47,14 +43,17 @@ object TracingBuiltins extends RichTurtleCommands {
       val fieldNode = new DefaultMutableTreeNode(field + " = " + field.get(obj).toString)
       if (Modifier.isStatic(field.getModifiers)) {
         staticFields add fieldNode
+        fieldNode setParent staticFields
       }
       else {
         node add fieldNode
+        fieldNode setParent node
       }
-      
+
       //depth condition only to find out why nothing is showing up 
-      if (depth < 3) { 
-        addChildren(field.get(obj), fieldNode, depth + 1) }
+      if (depth < 3) {
+        //addChildren(field.get(obj), fieldNode, depth + 1)
+      }
     }
     var superClass = obj.getClass().getSuperclass
     while (superClass != null) {
@@ -64,9 +63,11 @@ object TracingBuiltins extends RichTurtleCommands {
         val fieldNode = new DefaultMutableTreeNode(field + " = " + field.get(obj).toString)
         if (Modifier.isStatic(field.getModifiers)) {
           inStaticFields add fieldNode
+          fieldNode setParent inStaticFields
         }
         else {
           inFields add fieldNode
+          fieldNode setParent inFields
         }
         //  addChildren(field.get(obj), fieldNode)
       }
