@@ -225,13 +225,16 @@ def main(args: Array[String]) {
                   incrementCurrEvt(name)
                 }
               case methodEnterEvt: MethodEntryEvent =>
-                println("Method entered: " + methodEnterEvt.method().name())
+               // println("Method entered: " + methodEnterEvt.method().name())
+               /*
                 if (methodEnterEvt.method.name == "main") {
                   println("main method was exited. Events left are:")
                   evtReqs.foreach(evt =>
                     println("event is enabled? " + evt.isEnabled + ". and is " + evt)
                   )
                 }
+                * 
+                */
                 evtReqs.foreach(x => x.disable)
                 currThread = methodEnterEvt.thread()
                 if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
@@ -307,7 +310,7 @@ def main(args: Array[String]) {
                       callerLine,
                       callerLineNum
                     )
-                    println("Method entered done: " + methodEnterEvt.method().name())
+                    //println("Method entered done: " + methodEnterEvt.method().name())
                   }
                   catch {
                     case t: Throwable =>
@@ -317,7 +320,7 @@ def main(args: Array[String]) {
                 }
                 evtReqs.foreach(x => x.enable)
               case methodExitEvt: MethodExitEvent =>
-                println("Method exit: " + methodExitEvt.method.name)
+               // println("Method exit: " + methodExitEvt.method.name)
                 if (methodExitEvt.method.name == "main") {
                   println("main method was exited. Events left are:")
                   evtReqs.foreach(evt =>
@@ -340,7 +343,7 @@ def main(args: Array[String]) {
                       methodExitEvt.location.lineNumber - lineNumOffset,
                       methodExitEvt.returnValue
                     )
-                    println("Method exit evt done: " + methodExitEvt.method().name())
+                   // println("Method exit evt done: " + methodExitEvt.method().name())
                   }
                   catch {
                     case t: Throwable =>
