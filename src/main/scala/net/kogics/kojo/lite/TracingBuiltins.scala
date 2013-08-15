@@ -5,14 +5,14 @@ import java.awt.{ Color => JColor }
 import java.awt.{ Font => JFont }
 import java.awt.Paint
 import java.lang.reflect.Modifier
-
 import net.kogics.kojo.core.RichTurtleCommands
 import net.kogics.kojo.util.Utils
-
 import javax.swing.JFrame
 import javax.swing.JScrollPane
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 
 object TracingBuiltins extends RichTurtleCommands {
 
@@ -29,38 +29,43 @@ object TracingBuiltins extends RichTurtleCommands {
 
   def inspectx[T](obj: T, name: String) {}
   //def inspect[T](obj: T) { inspectx(obj, obj.toString) }
+val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
 
-  def addChildren[T](obj: T, node: DefaultMutableTreeNode, depth: Int) {
+  def addChildren[T](obj: T, node: DefaultMutableTreeNode) {
     val staticFields = new DefaultMutableTreeNode("Static Fields")
-    val inStaticFields = new DefaultMutableTreeNode("InStaticFields")
-    val inFields = new DefaultMutableTreeNode("InFields")
-    node.add(staticFields)
-    node.add(inStaticFields)
-    node.add(inFields)
-    val fields = obj.getClass().getDeclaredFields()
-    fields.foreach { field =>
-      field.setAccessible(true)
-      val fieldNode = new DefaultMutableTreeNode(field + " = " + field.get(obj).toString)
-      if (Modifier.isStatic(field.getModifiers)) {
-        staticFields add fieldNode
-        fieldNode setParent staticFields
-      }
-      else {
-        node add fieldNode
-        fieldNode setParent node
-      }
+    val inStaticFields = new DefaultMutableTreeNode("Inherited Static Fields")
+    val inFields = new DefaultMutableTreeNode("Inherited Fields")
+    val nodeArr = Vector(staticFields, inStaticFields, inFields)
 
-      //depth condition only to find out why nothing is showing up 
-      if (depth < 3) {
-        //addChildren(field.get(obj), fieldNode, depth + 1)
+    obj.getClass().getDeclaredFields().foreach { field =>
+      {
+        field.setAccessible(true)
+        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
+          new DefaultMutableTreeNode(field.get(obj), true)
+        else
+          new DefaultMutableTreeNode(field.get(obj), false)
+        
+        if (Modifier.isStatic(field.getModifiers)) {
+          staticFields add fieldNode
+          fieldNode setParent staticFields
+        }
+        else {
+          node add fieldNode
+          fieldNode setParent node
+        }
       }
     }
+
     var superClass = obj.getClass().getSuperclass
     while (superClass != null) {
       val fields = superClass.getDeclaredFields()
       fields.foreach { field =>
         field.setAccessible(true);
-        val fieldNode = new DefaultMutableTreeNode(field + " = " + field.get(obj).toString)
+        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
+          new DefaultMutableTreeNode(field.get(obj), true)
+        else
+          new DefaultMutableTreeNode(field.get(obj), false)
+
         if (Modifier.isStatic(field.getModifiers)) {
           inStaticFields add fieldNode
           fieldNode setParent inStaticFields
@@ -69,25 +74,29 @@ object TracingBuiltins extends RichTurtleCommands {
           inFields add fieldNode
           fieldNode setParent inFields
         }
-        //  addChildren(field.get(obj), fieldNode)
       }
       superClass = superClass.getSuperclass
     }
-
+    nodeArr.foreach(n => if (n.getChildCount > 0) node add n)
   }
 
   def inspect[T](obj: T) {
-    val root = new DefaultMutableTreeNode(obj)
-    addChildren(obj, root, 0)
-
     val panel = new JFrame("Object Inspection") {
-      var tree = new JTree(root)
-      var view = new JScrollPane(tree)
-
-      getContentPane add view
       setVisible(true)
+      val root = new DefaultMutableTreeNode(obj)
+      var tree = new JTree(root) {
+        addMouseListener(new MouseAdapter {
+          override def mouseClicked(e: MouseEvent) {
+            var rowClicked = getRowForLocation(e.getX(), e.getY())
+            var node = getPathForRow(rowClicked).getLastPathComponent().asInstanceOf[DefaultMutableTreeNode]
+            if (node.getAllowsChildren() && !ignoreNodes.contains(node.getUserObject))
+              addChildren(node.getUserObject(), node)
+          }
+        })
+      }
+      var view = new JScrollPane(tree)
+      getContentPane add view
     }
-
   }
 
   //  lazy val kojoCtx = new NoOpKojoCtx
