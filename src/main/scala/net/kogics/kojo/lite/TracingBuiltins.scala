@@ -16,6 +16,16 @@ import java.awt.event.MouseEvent
 
 object TracingBuiltins extends RichTurtleCommands {
 
+  class inspectNode[T](objt: T, prnt: String) {
+    var toPrint = prnt + objt.toString
+    var obj = objt
+    //var childRank = 0 
+
+    override def toString() = {
+      toPrint
+    }
+  }
+
   val primitives: Set[Class[_]] = Set(
     java.lang.Boolean.TYPE,
     java.lang.Character.TYPE,
@@ -29,7 +39,7 @@ object TracingBuiltins extends RichTurtleCommands {
 
   def inspectx[T](obj: T, name: String) {}
   //def inspect[T](obj: T) { inspectx(obj, obj.toString) }
-val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
+  val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
 
   def addChildren[T](obj: T, node: DefaultMutableTreeNode) {
     val staticFields = new DefaultMutableTreeNode("Static Fields")
@@ -41,10 +51,10 @@ val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited 
       {
         field.setAccessible(true)
         val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
-          new DefaultMutableTreeNode(field.get(obj), true)
+          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), true)
         else
-          new DefaultMutableTreeNode(field.get(obj), false)
-        
+          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), false)
+
         if (Modifier.isStatic(field.getModifiers)) {
           staticFields add fieldNode
           fieldNode setParent staticFields
@@ -62,9 +72,9 @@ val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited 
       fields.foreach { field =>
         field.setAccessible(true);
         val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
-          new DefaultMutableTreeNode(field.get(obj), true)
+          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), true)
         else
-          new DefaultMutableTreeNode(field.get(obj), false)
+          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), false)
 
         if (Modifier.isStatic(field.getModifiers)) {
           inStaticFields add fieldNode
@@ -83,14 +93,19 @@ val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited 
   def inspect[T](obj: T) {
     val panel = new JFrame("Object Inspection") {
       setVisible(true)
-      val root = new DefaultMutableTreeNode(obj)
+      val root = new DefaultMutableTreeNode(new inspectNode(obj, ""))
       var tree = new JTree(root) {
         addMouseListener(new MouseAdapter {
           override def mouseClicked(e: MouseEvent) {
-            var rowClicked = getRowForLocation(e.getX(), e.getY())
-            var node = getPathForRow(rowClicked).getLastPathComponent().asInstanceOf[DefaultMutableTreeNode]
-            if (node.getAllowsChildren() && !ignoreNodes.contains(node.getUserObject))
-              addChildren(node.getUserObject(), node)
+            val rowClicked = getRowForLocation(e.getX(), e.getY())
+            val node = getPathForRow(rowClicked).getLastPathComponent().asInstanceOf[DefaultMutableTreeNode]
+            val objt = if (node.getUserObject.isInstanceOf[inspectNode[_]])
+              node.getUserObject.asInstanceOf[inspectNode[_]].obj
+            else
+              node.getUserObject
+              
+            if (node.getAllowsChildren() && !ignoreNodes.contains(objt))
+              addChildren(objt, node)
           }
         })
       }
