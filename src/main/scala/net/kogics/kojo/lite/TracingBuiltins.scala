@@ -1,118 +1,14 @@
 package net.kogics.kojo
 package lite
 
-import java.awt.{ Color => JColor }
-import java.awt.{ Font => JFont }
+import java.awt.{Color => JColor}
+import java.awt.{Font => JFont}
 import java.awt.Paint
-import java.lang.reflect.Modifier
+
 import net.kogics.kojo.core.RichTurtleCommands
 import net.kogics.kojo.util.Utils
-import javax.swing.JFrame
-import javax.swing.JScrollPane
-import javax.swing.JTree
-import javax.swing.tree.DefaultMutableTreeNode
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
 
 object TracingBuiltins extends RichTurtleCommands {
-
-  class inspectNode[T](objt: T, prnt: String) {
-    var toPrint = prnt + objt.toString
-    var obj = objt
-    //var childRank = 0 
-
-    override def toString() = {
-      toPrint
-    }
-  }
-
-  val primitives: Set[Class[_]] = Set(
-    java.lang.Boolean.TYPE,
-    java.lang.Character.TYPE,
-    java.lang.Byte.TYPE,
-    java.lang.Short.TYPE,
-    java.lang.Integer.TYPE,
-    java.lang.Long.TYPE,
-    java.lang.Float.TYPE,
-    java.lang.Double.TYPE
-  )
-
-  def inspectx[T](obj: T, name: String) {}
-  //def inspect[T](obj: T) { inspectx(obj, obj.toString) }
-  val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
-
-  def addChildren[T](obj: T, node: DefaultMutableTreeNode) {
-    val staticFields = new DefaultMutableTreeNode("Static Fields")
-    val inStaticFields = new DefaultMutableTreeNode("Inherited Static Fields")
-    val inFields = new DefaultMutableTreeNode("Inherited Fields")
-    val nodeArr = Vector(staticFields, inStaticFields, inFields)
-
-    obj.getClass().getDeclaredFields().foreach { field =>
-      {
-        field.setAccessible(true)
-        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
-          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), true)
-        else
-          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), false)
-
-        if (Modifier.isStatic(field.getModifiers)) {
-          staticFields add fieldNode
-          fieldNode setParent staticFields
-        }
-        else {
-          node add fieldNode
-          fieldNode setParent node
-        }
-      }
-    }
-
-    var superClass = obj.getClass().getSuperclass
-    while (superClass != null) {
-      val fields = superClass.getDeclaredFields()
-      fields.foreach { field =>
-        field.setAccessible(true);
-        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
-          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), true)
-        else
-          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), false)
-
-        if (Modifier.isStatic(field.getModifiers)) {
-          inStaticFields add fieldNode
-          fieldNode setParent inStaticFields
-        }
-        else {
-          inFields add fieldNode
-          fieldNode setParent inFields
-        }
-      }
-      superClass = superClass.getSuperclass
-    }
-    nodeArr.foreach(n => if (n.getChildCount > 0) node add n)
-  }
-
-  def inspect[T](obj: T) {
-    val panel = new JFrame("Object Inspection") {
-      setVisible(true)
-      val root = new DefaultMutableTreeNode(new inspectNode(obj, ""))
-      var tree = new JTree(root) {
-        addMouseListener(new MouseAdapter {
-          override def mouseClicked(e: MouseEvent) {
-            val rowClicked = getRowForLocation(e.getX(), e.getY())
-            val node = getPathForRow(rowClicked).getLastPathComponent().asInstanceOf[DefaultMutableTreeNode]
-            val objt = if (node.getUserObject.isInstanceOf[inspectNode[_]])
-              node.getUserObject.asInstanceOf[inspectNode[_]].obj
-            else
-              node.getUserObject
-              
-            if (node.getAllowsChildren() && !ignoreNodes.contains(objt))
-              addChildren(objt, node)
-          }
-        })
-      }
-      var view = new JScrollPane(tree)
-      getContentPane add view
-    }
-  }
 
   //  lazy val kojoCtx = new NoOpKojoCtx
   //  lazy val spriteCanvas = new SpriteCanvas(kojoCtx)

@@ -22,9 +22,7 @@ import java.awt.GradientPaint
 import java.awt.Paint
 import java.awt.Toolkit
 import java.util.concurrent.CountDownLatch
-
 import javax.swing.JComponent
-
 import net.kogics.kojo.mathworld.MathWorld
 import net.kogics.kojo.story.HandlerHolder
 import net.kogics.kojo.turtle.TurtleWorldAPI
@@ -34,7 +32,6 @@ import net.kogics.kojo.xscala.CodeCompletionUtils
 import net.kogics.kojo.xscala.Help
 import net.kogics.kojo.xscala.RepeatCommands
 import net.kogics.kojo.xscala.ScalaCodeRunner
-
 import core.Rectangle
 import core.Voice
 import story.HandlerHolder
@@ -44,6 +41,13 @@ import story.VoidHandlerHolder
 import util.Read
 import util.Throttler
 import util.Utils
+import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.JTree
+import javax.swing.JScrollPane
+import javax.swing.JFrame
+import java.lang.reflect.Modifier
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 
 // a static instance is needed for the compiler prefix code 
 object Builtins {
@@ -92,7 +96,7 @@ class Builtins(
   val darkGray = JColor.darkGray
   val magenta = JColor.magenta
   val cyan = JColor.cyan
-  
+
   val BoldFont = JFont.BOLD
   val PlainFont = JFont.PLAIN
   val ItalicFont = JFont.ITALIC
@@ -105,6 +109,115 @@ class Builtins(
   val Costume = new Tw.Costume
   val Background = new Tw.Background
   val Sound = new Tw.Sound
+
+  class inspectNode[T](objt: T, prnt: String) {
+    var toPrint = prnt + objt.toString
+    var obj = objt
+    //var childRank = 0 
+
+    override def toString() = {
+      toPrint
+    }
+  }
+
+  val primitives: Set[Class[_]] = Set(
+    java.lang.Boolean.TYPE,
+    java.lang.Character.TYPE,
+    java.lang.Byte.TYPE,
+    java.lang.Short.TYPE,
+    java.lang.Integer.TYPE,
+    java.lang.Long.TYPE,
+    java.lang.Float.TYPE,
+    java.lang.Double.TYPE
+  )
+
+  def inspectx[T](obj: T, name: String) {}
+  //def inspect[T](obj: T) { inspectx(obj, obj.toString) }
+  val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
+
+  def addChildren[T](obj: T, node: DefaultMutableTreeNode) {
+    val staticFields = new DefaultMutableTreeNode("Static Fields")
+    val inStaticFields = new DefaultMutableTreeNode("Inherited Static Fields")
+    val inFields = new DefaultMutableTreeNode("Inherited Fields")
+    val nodeArr = Vector(staticFields, inStaticFields, inFields)
+
+    obj.getClass().getDeclaredFields().foreach { field =>
+      field.setAccessible(true)
+      field.get(obj) match {
+        case null            =>
+        case arr: Array[Any] =>
+          val elementData = new DefaultMutableTreeNode(field.toString)
+          node add elementData
+          println("the index size is" + arr.size)
+          for (index <- 0 to arr.size - 1) {
+            val idxNode =  new DefaultMutableTreeNode(index)
+            elementData add idxNode
+            idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
+          }
+        case fieldVal =>
+          val fieldNode = if (!primitives.contains(field.getType))
+            new DefaultMutableTreeNode(new inspectNode(fieldVal, field.toString + "="), true)
+          else
+            new DefaultMutableTreeNode(new inspectNode(fieldVal, field.toString + "="), false)
+
+          if (Modifier.isStatic(field.getModifiers)) {
+            staticFields add fieldNode
+            fieldNode setParent staticFields
+          }
+          else {
+            node add fieldNode
+            fieldNode setParent node
+          }
+      }
+    }
+
+    var superClass = obj.getClass().getSuperclass
+    while (superClass != null) {
+      val fields = superClass.getDeclaredFields()
+      fields.foreach { field =>
+        field.setAccessible(true);
+        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
+          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), true)
+        else
+          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), false)
+
+        if (Modifier.isStatic(field.getModifiers)) {
+          inStaticFields add fieldNode
+          fieldNode setParent inStaticFields
+        }
+        else {
+          inFields add fieldNode
+          fieldNode setParent inFields
+        }
+      }
+      superClass = superClass.getSuperclass
+    }
+    nodeArr.foreach(n => if (n.getChildCount > 0) node add n)
+  }
+
+  def inspect[T](obj: T) {
+    val panel = new JFrame("Object Inspection") {
+      setVisible(true)
+      val root = new DefaultMutableTreeNode(new inspectNode(obj, ""))
+      var tree = new JTree(root) {
+        addMouseListener(new MouseAdapter {
+          override def mouseClicked(e: MouseEvent) {
+            val node = getLastSelectedPathComponent
+            val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
+            val objt = if (nodeContent.getUserObject.isInstanceOf[inspectNode[_]])
+              nodeContent.getUserObject.asInstanceOf[inspectNode[_]].obj
+            else
+              nodeContent.getUserObject
+
+            if (nodeContent.getAllowsChildren() && !ignoreNodes.contains(objt) && nodeContent.getChildCount() == 0)
+              addChildren(objt, nodeContent)
+          }
+        })
+      }
+      var view = new JScrollPane(tree)
+      getContentPane add view
+    }
+  }
 
   def showScriptInOutput() = kojoCtx.showScriptInOutput()
   UserCommand("showScriptInOutput", Nil, "Enables the display of scripts in the output window when they run.")
