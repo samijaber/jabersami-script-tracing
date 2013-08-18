@@ -110,8 +110,8 @@ class Builtins(
   val Background = new Tw.Background
   val Sound = new Tw.Sound
 
-  class inspectNode[T](objt: T, prnt: String) {
-    var toPrint = prnt + objt.toString
+  class inspectNode[T](objt: T, prnt: String, id: String) {
+    var toPrint = prnt + objt.toString + id
     var obj = objt
     //var childRank = 0 
 
@@ -135,6 +135,10 @@ class Builtins(
   //def inspect[T](obj: T) { inspectx(obj, obj.toString) }
   val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
 
+  def simplifyStr(name: String): String = {
+    name.splitAt(name.lastIndexOf(".") + 1)._2
+  }
+
   def addChildren[T](obj: T, node: DefaultMutableTreeNode) {
     val staticFields = new DefaultMutableTreeNode("Static Fields")
     val inStaticFields = new DefaultMutableTreeNode("Inherited Static Fields")
@@ -144,21 +148,21 @@ class Builtins(
     obj.getClass().getDeclaredFields().foreach { field =>
       field.setAccessible(true)
       field.get(obj) match {
-        case null            =>
+        case null =>
         case arr: Array[Any] =>
-          val elementData = new DefaultMutableTreeNode(field.toString)
+          val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.getType().getName() + "=" + "(%s)" format arr.map { n => s"$n"}.mkString(","))
           node add elementData
           println("the index size is" + arr.size)
           for (index <- 0 to arr.size - 1) {
-            val idxNode =  new DefaultMutableTreeNode(index)
+            val idxNode = new DefaultMutableTreeNode(index)
             elementData add idxNode
             idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
           }
         case fieldVal =>
           val fieldNode = if (!primitives.contains(field.getType))
-            new DefaultMutableTreeNode(new inspectNode(fieldVal, field.toString + "="), true)
+            new DefaultMutableTreeNode(new inspectNode(fieldVal, simplifyStr(field.toString) + ": " + field.getType().getName() + "=", " [id = " + System.identityHashCode(fieldVal).toString) + "]", true)
           else
-            new DefaultMutableTreeNode(new inspectNode(fieldVal, field.toString + "="), false)
+            new DefaultMutableTreeNode(new inspectNode(fieldVal, simplifyStr(field.toString) + ": " + field.getType().getName() + "=", " [id = " + System.identityHashCode(fieldVal).toString) + "]", false)
 
           if (Modifier.isStatic(field.getModifiers)) {
             staticFields add fieldNode
@@ -177,9 +181,9 @@ class Builtins(
       fields.foreach { field =>
         field.setAccessible(true);
         val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
-          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), true)
+          new DefaultMutableTreeNode(new inspectNode(field.get(obj), simplifyStr(field.toString) + ": " + field.getType().getName() + "=", " [id = " + System.identityHashCode(field.get(obj)).toString + "]"), true)
         else
-          new DefaultMutableTreeNode(new inspectNode(field.get(obj), field.toString + "="), false)
+          new DefaultMutableTreeNode(new inspectNode(field.get(obj), simplifyStr(field.toString) + ": " + field.getType().getName() + "=", " [id = " + System.identityHashCode(field.get(obj)).toString + "]"), false)
 
         if (Modifier.isStatic(field.getModifiers)) {
           inStaticFields add fieldNode
@@ -198,13 +202,14 @@ class Builtins(
   def inspect[T](obj: T) {
     val panel = new JFrame("Object Inspection") {
       setVisible(true)
-      val root = new DefaultMutableTreeNode(new inspectNode(obj, ""))
+      val root = new DefaultMutableTreeNode(new inspectNode(obj, "", ""))
+      addChildren(obj, root)
       var tree = new JTree(root) {
         addMouseListener(new MouseAdapter {
           override def mouseClicked(e: MouseEvent) {
             val node = getLastSelectedPathComponent
             val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
-            val objt = if (nodeContent.getUserObject.isInstanceOf[inspectNode[_]])
+            val objt = if (nodeContent.getUserObject != null && nodeContent.getUserObject.isInstanceOf[inspectNode[_]])
               nodeContent.getUserObject.asInstanceOf[inspectNode[_]].obj
             else
               nodeContent.getUserObject

@@ -240,7 +240,7 @@ def main(args: Array[String]) {
                 if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
                   try {
                     val toprint = try {
-                      if (false /*methodEnterEvt.method.arguments.size > 0*/ )
+                      if (methodEnterEvt.method.arguments.size > 0)
                         "(%s)" format methodEnterEvt.method.arguments.map { n =>
                           val frame = methodEnterEvt.thread.frame(0)
                           val frameVal = frame.getValue(n)
@@ -521,7 +521,7 @@ def main(args: Array[String]) {
         turtle.penDown
       case "circle" =>
         val r = stkfrm.getValue(localArgs(0)).toString.toDouble
-        turtle.circle(r)
+        turtle.arc(r, 360)
       case "savePosHe" =>
         turtle.savePosHe
       case "restorePosHe" =>
