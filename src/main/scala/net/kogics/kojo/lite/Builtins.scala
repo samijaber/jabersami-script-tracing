@@ -131,8 +131,6 @@ class Builtins(
     java.lang.Double.TYPE
   )
 
-  def inspectx[T](obj: T, name: String) {}
-  //def inspect[T](obj: T) { inspectx(obj, obj.toString) }
   val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
 
   def simplifyStr(name: String): String = {
@@ -199,17 +197,17 @@ class Builtins(
     nodeArr.foreach(n => if (n.getChildCount > 0) node add n)
   }
 
-  def inspect[T](obj: T) {
+  def inspect[T](obj: T, name: String) {
     val panel = new JFrame("Object Inspection") {
       setVisible(true)
-      val root = new DefaultMutableTreeNode(new inspectNode(obj, "", ""))
+      val root = new DefaultMutableTreeNode(new inspectNode(obj, name + "=", ""))
       addChildren(obj, root)
       var tree = new JTree(root) {
         addMouseListener(new MouseAdapter {
           override def mouseClicked(e: MouseEvent) {
             val node = getLastSelectedPathComponent
             val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
-            val objt = if (nodeContent.getUserObject != null && nodeContent.getUserObject.isInstanceOf[inspectNode[_]])
+            val objt = if (nodeContent != null && nodeContent.getUserObject != null && nodeContent.getUserObject.isInstanceOf[inspectNode[_]])
               nodeContent.getUserObject.asInstanceOf[inspectNode[_]].obj
             else
               nodeContent.getUserObject
