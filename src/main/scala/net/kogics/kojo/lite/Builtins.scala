@@ -48,6 +48,7 @@ import javax.swing.JFrame
 import java.lang.reflect.Modifier
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.lang.reflect.Field
 
 // a static instance is needed for the compiler prefix code 
 object Builtins {
@@ -133,6 +134,7 @@ class Builtins(
 
   val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
 
+  def sortFields(f1: Field, f2: Field) = simplifyStr(f1.toString) < simplifyStr(f2.toString)
   def simplifyStr(name: String): String = {
     name.splitAt(name.lastIndexOf(".") + 1)._2
   }
@@ -143,14 +145,14 @@ class Builtins(
     val inFields = new DefaultMutableTreeNode("Inherited Fields")
     val nodeArr = Vector(staticFields, inStaticFields, inFields)
 
-    obj.getClass().getDeclaredFields().foreach { field =>
+    var fields = obj.getClass().getDeclaredFields().sortWith(sortFields)
+    fields.foreach { field =>
       field.setAccessible(true)
       field.get(obj) match {
         case null =>
         case arr: Array[Any] =>
-          val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.getType().getName() + "=" + "(%s)" format arr.map { n => s"$n"}.mkString(","))
+          val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.getType().getName() + "=" + "(%s)" format arr.map { n => s"$n" }.mkString(","))
           node add elementData
-          println("the index size is" + arr.size)
           for (index <- 0 to arr.size - 1) {
             val idxNode = new DefaultMutableTreeNode(index)
             elementData add idxNode
@@ -175,7 +177,7 @@ class Builtins(
 
     var superClass = obj.getClass().getSuperclass
     while (superClass != null) {
-      val fields = superClass.getDeclaredFields()
+      val fields = superClass.getDeclaredFields().sortWith(sortFields)
       fields.foreach { field =>
         field.setAccessible(true);
         val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
@@ -204,6 +206,14 @@ class Builtins(
       addChildren(obj, root)
       var tree = new JTree(root) {
         addMouseListener(new MouseAdapter {
+          override def mousePressed(e: MouseEvent) {
+            val node = getLastSelectedPathComponent
+            val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
+            if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 1 && nodeContent.getFirstChild().asInstanceOf[DefaultMutableTreeNode].getUserObject() == "_toExpandNode_")
+              nodeContent.removeAllChildren()
+           else if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 0)
+              nodeContent.add(new DefaultMutableTreeNode("_toExpandNode_"))
+          }
           override def mouseClicked(e: MouseEvent) {
             val node = getLastSelectedPathComponent
             val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
@@ -211,9 +221,12 @@ class Builtins(
               nodeContent.getUserObject.asInstanceOf[inspectNode[_]].obj
             else
               nodeContent.getUserObject
-
-            if (nodeContent.getAllowsChildren() && !ignoreNodes.contains(objt) && nodeContent.getChildCount() == 0)
-              addChildren(objt, nodeContent)
+              
+            if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 1 && nodeContent.getFirstChild().asInstanceOf[DefaultMutableTreeNode].getUserObject() == "_toExpandNode_") {
+              nodeContent.removeAllChildren()
+              if (!ignoreNodes.contains(objt))
+                addChildren(objt, nodeContent)
+            }
           }
         })
       }
