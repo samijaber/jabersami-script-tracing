@@ -112,10 +112,12 @@ class Builtins(
   val Sound = new Tw.Sound
 
   class inspectNode[T](objt: T, prnt: String, id: String) {
-    var toPrint = prnt + objt.toString + id
-    var obj = objt
-    //var childRank = 0 
-
+    val obj = objt
+    val toPrint = if (objt != null)
+      prnt + objt.toString + id
+    else
+      prnt + "null" + id      
+    
     override def toString() = {
       toPrint
     }
@@ -160,9 +162,9 @@ class Builtins(
           }
         case fieldVal =>
           val fieldNode = if (!primitives.contains(field.getType))
-            new DefaultMutableTreeNode(new inspectNode(fieldVal, simplifyStr(field.toString) + ": " + field.getType().getName() + "=", " [id = " + System.identityHashCode(fieldVal).toString) + "]", true)
+            new DefaultMutableTreeNode(new inspectNode(fieldVal, simplifyStr(field.toString) + ": " + field.getType().getName() + "=", " [id = " + System.identityHashCode(fieldVal).toString + "]"), true)
           else
-            new DefaultMutableTreeNode(new inspectNode(fieldVal, simplifyStr(field.toString) + ": " + field.getType().getName() + "=", " [id = " + System.identityHashCode(fieldVal).toString) + "]", false)
+            new DefaultMutableTreeNode(new inspectNode(fieldVal, simplifyStr(field.toString) + ": " + field.getType().getName() + "=", " [id = " + System.identityHashCode(fieldVal).toString + "]"), false)
 
           if (Modifier.isStatic(field.getModifiers)) {
             staticFields add fieldNode
@@ -211,17 +213,20 @@ class Builtins(
             val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
             if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 1 && nodeContent.getFirstChild().asInstanceOf[DefaultMutableTreeNode].getUserObject() == "_toExpandNode_")
               nodeContent.removeAllChildren()
-           else if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 0)
+            else if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 0)
               nodeContent.add(new DefaultMutableTreeNode("_toExpandNode_"))
           }
           override def mouseClicked(e: MouseEvent) {
             val node = getLastSelectedPathComponent
             val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
-            val objt = if (nodeContent != null && nodeContent.getUserObject != null && nodeContent.getUserObject.isInstanceOf[inspectNode[_]])
+            val objt = try {
               nodeContent.getUserObject.asInstanceOf[inspectNode[_]].obj
-            else
-              nodeContent.getUserObject
-              
+            }
+            catch {
+              case _: Throwable =>
+                println("inspectNode obj not recieved")
+                nodeContent.getUserObject
+            }
             if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 1 && nodeContent.getFirstChild().asInstanceOf[DefaultMutableTreeNode].getUserObject() == "_toExpandNode_") {
               nodeContent.removeAllChildren()
               if (!ignoreNodes.contains(objt))
