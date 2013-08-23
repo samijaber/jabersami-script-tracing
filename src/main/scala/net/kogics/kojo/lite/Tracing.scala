@@ -180,69 +180,6 @@ def main(args: Array[String]) {
     name
     //name.splitAt(name.lastIndexOf(".") + 1)._2
   }
-  def addChildren[T](obj: T, node: DefaultMutableTreeNode) {
-    val staticFields = new DefaultMutableTreeNode("Static Fields")
-    val inStaticFields = new DefaultMutableTreeNode("Inherited Static Fields")
-    val inFields = new DefaultMutableTreeNode("Inherited Fields")
-    val nodeArr = Vector(staticFields, inStaticFields, inFields)
-
-    var fields = obj.getClass().getDeclaredFields() //.sortWith(sortFields)
-    fields.foreach { field =>
-      field.setAccessible(true)
-      field.get(obj) match {
-        case null =>
-        case arr: Array[Any] =>
-          val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.getType().getName() + "=" + "(%s)" format arr.map { n => s"$n" }.mkString(","))
-          node add elementData
-          for (index <- 0 to arr.size - 1) {
-            val idxNode = new DefaultMutableTreeNode(index)
-            elementData add idxNode
-            idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
-          }
-        case fieldVal =>
-          val fieldNode = if (!primitives.contains(field.getType))
-            new DefaultMutableTreeNode(fieldVal, true)
-          else
-            new DefaultMutableTreeNode(fieldVal, false)
-
-          node add fieldNode
-        /*
-          if (Modifier.isStatic(field.getModifiers)) {
-            staticFields add fieldNode
-            fieldNode setParent staticFields
-          }
-          else {
-            node add fieldNode
-            fieldNode setParent node
-          }*/
-      }
-    }
-
-    var superClass = obj.getClass().getSuperclass
-    while (superClass != null) {
-      val fields = superClass.getDeclaredFields() //.sortWith(sortFields)
-      fields.foreach { field =>
-        field.setAccessible(true);
-        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
-          new DefaultMutableTreeNode(field.get(obj), true)
-        else
-          new DefaultMutableTreeNode(field.get(obj), false)
-
-        node add fieldNode
-        /*
-        if (Modifier.isStatic(field.getModifiers)) {
-          inStaticFields add fieldNode
-          fieldNode setParent inStaticFields
-        }
-        else {
-          inFields add fieldNode
-          fieldNode setParent inFields
-        }*/
-      }
-      superClass = superClass.getSuperclass
-    }
-    nodeArr.foreach(n => if (n.getChildCount > 0) node add n)
-  }
 
   def addChildren(obj: ObjectReference, node: DefaultMutableTreeNode) {
     val staticFields = new DefaultMutableTreeNode("Static Fields")
@@ -254,10 +191,12 @@ def main(args: Array[String]) {
     fields.foreach { field =>
       var fieldVal = obj.getValue(field)
       println("value for field " + field + " is: " + fieldVal)
-
-      fieldVal.`type` match {
+      fieldVal match {
         case null =>
-          /*
+        case _ =>
+          fieldVal.`type` match {
+            case null =>
+            /*
         case Array[Any] =>
           val arr = fieldVal.asInstanceOf[ArrayReference].getValues
           val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.`type`.name + "=" + "(%s)" format arr.map { n => s"$n" }.mkString(","))
@@ -267,13 +206,16 @@ def main(args: Array[String]) {
             elementData add idxNode
             idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
           }*/
-        case _ =>
-          val fieldNode = if (field.isInstanceOf[PrimitiveValue])
-            new DefaultMutableTreeNode(fieldVal, true)
-          else
-            new DefaultMutableTreeNode(fieldVal, false)
-          node add fieldNode
-        /*
+            case _ =>
+              val fieldNode = if (!field.isInstanceOf[PrimitiveValue])
+                new DefaultMutableTreeNode(fieldVal, true)
+              else
+                new DefaultMutableTreeNode(fieldVal, false)
+              node add fieldNode
+
+              if (fieldNode.getLevel() < 20 && fieldNode.getAllowsChildren() && fieldNode.getChildCount() == 0 && fieldVal.isInstanceOf[ObjectReference])
+                addChildren(fieldNode.getUserObject().asInstanceOf[ObjectReference], fieldNode)
+            /*
           if (Modifier.isStatic(field.getModifiers)) {
             staticFields add fieldNode
             fieldNode setParent staticFields
@@ -282,32 +224,10 @@ def main(args: Array[String]) {
             node add fieldNode
             fieldNode setParent node
           }*/
+          }
       }
     }
-    /*
-    var superClass = obj.getClass().getSuperclass
-    while (superClass != null) {
-      val fields = superClass.getDeclaredFields() //.sortWith(sortFields)
-      fields.foreach { field =>
-        field.setAccessible(true);
-        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
-          new DefaultMutableTreeNode(field.get(obj), true)
-        else
-          new DefaultMutableTreeNode(field.get(obj), false)
 
-        node add fieldNode
-        /*
-        if (Modifier.isStatic(field.getModifiers)) {
-          inStaticFields add fieldNode
-          fieldNode setParent inStaticFields
-        }
-        else {
-          inFields add fieldNode
-          fieldNode setParent inFields
-        }*/
-      }
-      superClass = superClass.getSuperclass
-    }*/
     //nodeArr.foreach(n => if (n.getChildCount > 0) node add n)
   }
 
@@ -317,15 +237,16 @@ def main(args: Array[String]) {
       val root = new DefaultMutableTreeNode(obj)
       addChildren(obj.asInstanceOf[ObjectReference], root)
       var tree = new JTree(root) {
+        /*
         addMouseListener(new MouseAdapter {
           override def mouseClicked(e: MouseEvent) {
             val node = getLastSelectedPathComponent
             val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
             val objt = nodeContent.getUserObject
-            if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 0 && !ignoreNodes.contains(objt))
-              addChildren(objt, nodeContent)
+            if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 0 && objt.isInstanceOf[ObjectReference])
+              addChildren(objt.asInstanceOf[ObjectReference], nodeContent)
           }
-        })
+        })*/
       }
       var view = new JScrollPane(tree)
       getContentPane add view
