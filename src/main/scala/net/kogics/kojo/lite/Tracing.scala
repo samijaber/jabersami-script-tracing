@@ -64,6 +64,7 @@ import com.sun.jdi.PrimitiveValue
 import com.sun.jdi.Field
 import scala.collection.parallel.ThrowableOps
 import com.sun.jdi.ClassObjectReference
+import com.sun.jdi.ArrayType
 
 class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
@@ -179,14 +180,14 @@ def main(args: Array[String]) {
   def simplifyStr(name: String): String = {
     name.splitAt(name.lastIndexOf(".") + 1)._2
   }
-  
-    class inspectNode[T](objt: T, prnt: String) {
+
+  class inspectNode[T](objt: T, prnt: String) {
     val obj = objt
     val toPrint = if (objt != null)
       prnt + objt.toString
     else
-      prnt + "null"    
-    
+      prnt + "null"
+
     override def toString() = {
       toPrint
     }
@@ -207,16 +208,15 @@ def main(args: Array[String]) {
         case _ =>
           fieldVal.`type` match {
             case null =>
-            /*
-        case Array[Any] =>
-          val arr = fieldVal.asInstanceOf[ArrayReference].getValues
-          val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.`type`.name + "=" + "(%s)" format arr.map { n => s"$n" }.mkString(","))
-          node add elementData
-          for (index <- 0 to arr.size - 1) {
-            val idxNode = new DefaultMutableTreeNode(index)
-            elementData add idxNode
-            idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
-          }*/
+            case typ: ArrayType =>
+              val arr = fieldVal.asInstanceOf[ArrayReference].getValues
+              val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.`type`.name + "=" + "(%s)" format arr.map { n => s"$n" }.mkString(","))
+              node add elementData
+              for (index <- 0 to arr.size - 1) {
+                val idxNode = new DefaultMutableTreeNode(index)
+                elementData add idxNode
+                idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
+              }
             case _ =>
               val toprint = simplifyStr(field.toString) + ": " + field.typeName() + "="
               val fieldNode = if (!field.isInstanceOf[PrimitiveValue])
