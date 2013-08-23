@@ -177,8 +177,19 @@ def main(args: Array[String]) {
 
   //def sortFields(f1: Field, f2: Field) = simplifyStr(f1.toString) < simplifyStr(f2.toString)
   def simplifyStr(name: String): String = {
-    name
-    //name.splitAt(name.lastIndexOf(".") + 1)._2
+    name.splitAt(name.lastIndexOf(".") + 1)._2
+  }
+  
+    class inspectNode[T](objt: T, prnt: String) {
+    val obj = objt
+    val toPrint = if (objt != null)
+      prnt + objt.toString
+    else
+      prnt + "null"    
+    
+    override def toString() = {
+      toPrint
+    }
   }
 
   def addChildren(obj: ObjectReference, node: DefaultMutableTreeNode) {
@@ -207,14 +218,15 @@ def main(args: Array[String]) {
             idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
           }*/
             case _ =>
+              val toprint = simplifyStr(field.toString) + ": " + field.typeName() + "="
               val fieldNode = if (!field.isInstanceOf[PrimitiveValue])
-                new DefaultMutableTreeNode(fieldVal, true)
+                new DefaultMutableTreeNode(new inspectNode(fieldVal, toprint), true)
               else
-                new DefaultMutableTreeNode(fieldVal, false)
+                new DefaultMutableTreeNode(new inspectNode(fieldVal, toprint), false)
               node add fieldNode
 
               if (fieldNode.getLevel() < 20 && fieldNode.getAllowsChildren() && fieldNode.getChildCount() == 0 && fieldVal.isInstanceOf[ObjectReference])
-                addChildren(fieldNode.getUserObject().asInstanceOf[ObjectReference], fieldNode)
+                addChildren(fieldVal.asInstanceOf[ObjectReference], fieldNode)
             /*
           if (Modifier.isStatic(field.getModifiers)) {
             staticFields add fieldNode
