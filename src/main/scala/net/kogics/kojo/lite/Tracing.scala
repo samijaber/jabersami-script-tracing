@@ -18,7 +18,6 @@ package net.kogics.kojo.lite
 import java.awt.Color
 import java.awt.geom.Point2D
 import java.io.File
-
 import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.mutable.HashMap
@@ -30,7 +29,6 @@ import scala.tools.nsc.reporters.Reporter
 import scala.util.control.Breaks.break
 import scala.util.control.Breaks.breakable
 import scala.util.matching.Regex
-
 import com.sun.jdi.AbsentInformationException
 import com.sun.jdi.ArrayReference
 import com.sun.jdi.Bootstrap
@@ -53,14 +51,19 @@ import com.sun.jdi.event.VMDeathEvent
 import com.sun.jdi.event.VMDisconnectEvent
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.request.EventRequest
-
 import net.kogics.kojo.core.Turtle
 import net.kogics.kojo.util.Utils
-
 import javax.swing.JFrame
 import javax.swing.JScrollPane
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
+import com.sun.jdi.BooleanValue
+import com.sun.jdi.PrimitiveValue
+import com.sun.jdi.Field
+import scala.collection.parallel.ThrowableOps
+import com.sun.jdi.ClassObjectReference
 
 class Tracing(scriptEditor: ScriptEditor, builtins: Builtins) {
   var evtSet: EventSet = _
@@ -159,35 +162,174 @@ def main(args: Array[String]) {
     }
   }
 
-  def inspect(obj: Value, name: String) {
-    var root = new DefaultMutableTreeNode(obj)
+  val primitives: Set[Class[_]] = Set(
+    java.lang.Boolean.TYPE,
+    java.lang.Character.TYPE,
+    java.lang.Byte.TYPE,
+    java.lang.Short.TYPE,
+    java.lang.Integer.TYPE,
+    java.lang.Long.TYPE,
+    java.lang.Float.TYPE,
+    java.lang.Double.TYPE
+  )
 
-    val panel = new JFrame("Object Inspection") {
-      val subRoot = new DefaultMutableTreeNode("information about root")
-      root.add(subRoot)
+  val ignoreNodes = Vector("Static Fields", "Inherited Static Fields", "Inherited Fields")
 
-      val nameNode = new DefaultMutableTreeNode(name)
-      subRoot add nameNode
+  //def sortFields(f1: Field, f2: Field) = simplifyStr(f1.toString) < simplifyStr(f2.toString)
+  def simplifyStr(name: String): String = {
+    name
+    //name.splitAt(name.lastIndexOf(".") + 1)._2
+  }
+  def addChildren[T](obj: T, node: DefaultMutableTreeNode) {
+    val staticFields = new DefaultMutableTreeNode("Static Fields")
+    val inStaticFields = new DefaultMutableTreeNode("Inherited Static Fields")
+    val inFields = new DefaultMutableTreeNode("Inherited Fields")
+    val nodeArr = Vector(staticFields, inStaticFields, inFields)
 
-      val id = System.identityHashCode(obj).toString
-      val idNode = new DefaultMutableTreeNode(id)
-      subRoot add idNode
+    var fields = obj.getClass().getDeclaredFields() //.sortWith(sortFields)
+    fields.foreach { field =>
+      field.setAccessible(true)
+      field.get(obj) match {
+        case null =>
+        case arr: Array[Any] =>
+          val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.getType().getName() + "=" + "(%s)" format arr.map { n => s"$n" }.mkString(","))
+          node add elementData
+          for (index <- 0 to arr.size - 1) {
+            val idxNode = new DefaultMutableTreeNode(index)
+            elementData add idxNode
+            idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
+          }
+        case fieldVal =>
+          val fieldNode = if (!primitives.contains(field.getType))
+            new DefaultMutableTreeNode(fieldVal, true)
+          else
+            new DefaultMutableTreeNode(fieldVal, false)
 
-      subRoot add new DefaultMutableTreeNode(obj.`type`.toString)
-      
-      val children = new DefaultMutableTreeNode("children")
-      root.add(children)
-      
-      //incomplete case
-      //if (obj.isInstanceOf[Iterable[_]]) {}
-
-      var tree = new JTree(root)
-      var view = new JScrollPane(tree)
-
-      getContentPane add view
-      setVisible(true)
+          node add fieldNode
+        /*
+          if (Modifier.isStatic(field.getModifiers)) {
+            staticFields add fieldNode
+            fieldNode setParent staticFields
+          }
+          else {
+            node add fieldNode
+            fieldNode setParent node
+          }*/
+      }
     }
 
+    var superClass = obj.getClass().getSuperclass
+    while (superClass != null) {
+      val fields = superClass.getDeclaredFields() //.sortWith(sortFields)
+      fields.foreach { field =>
+        field.setAccessible(true);
+        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
+          new DefaultMutableTreeNode(field.get(obj), true)
+        else
+          new DefaultMutableTreeNode(field.get(obj), false)
+
+        node add fieldNode
+        /*
+        if (Modifier.isStatic(field.getModifiers)) {
+          inStaticFields add fieldNode
+          fieldNode setParent inStaticFields
+        }
+        else {
+          inFields add fieldNode
+          fieldNode setParent inFields
+        }*/
+      }
+      superClass = superClass.getSuperclass
+    }
+    nodeArr.foreach(n => if (n.getChildCount > 0) node add n)
+  }
+
+  def addChildren(obj: ObjectReference, node: DefaultMutableTreeNode) {
+    val staticFields = new DefaultMutableTreeNode("Static Fields")
+    val inStaticFields = new DefaultMutableTreeNode("Inherited Static Fields")
+    val inFields = new DefaultMutableTreeNode("Inherited Fields")
+    val nodeArr = Vector(staticFields, inStaticFields, inFields)
+
+    var fields = obj.referenceType().allFields()
+    fields.foreach { field =>
+      var fieldVal = obj.getValue(field)
+      println("value for field " + field + " is: " + fieldVal)
+
+      fieldVal.`type` match {
+        case null =>
+          /*
+        case Array[Any] =>
+          val arr = fieldVal.asInstanceOf[ArrayReference].getValues
+          val elementData = new DefaultMutableTreeNode(simplifyStr(field.toString) + ": " + field.`type`.name + "=" + "(%s)" format arr.map { n => s"$n" }.mkString(","))
+          node add elementData
+          for (index <- 0 to arr.size - 1) {
+            val idxNode = new DefaultMutableTreeNode(index)
+            elementData add idxNode
+            idxNode add (if (arr(index) == null) new DefaultMutableTreeNode("null", false) else new DefaultMutableTreeNode(arr(index)))
+          }*/
+        case _ =>
+          val fieldNode = if (field.isInstanceOf[PrimitiveValue])
+            new DefaultMutableTreeNode(fieldVal, true)
+          else
+            new DefaultMutableTreeNode(fieldVal, false)
+          node add fieldNode
+        /*
+          if (Modifier.isStatic(field.getModifiers)) {
+            staticFields add fieldNode
+            fieldNode setParent staticFields
+          }
+          else {
+            node add fieldNode
+            fieldNode setParent node
+          }*/
+      }
+    }
+    /*
+    var superClass = obj.getClass().getSuperclass
+    while (superClass != null) {
+      val fields = superClass.getDeclaredFields() //.sortWith(sortFields)
+      fields.foreach { field =>
+        field.setAccessible(true);
+        val fieldNode = if (field.get(obj) != null && !primitives.contains(field.getType))
+          new DefaultMutableTreeNode(field.get(obj), true)
+        else
+          new DefaultMutableTreeNode(field.get(obj), false)
+
+        node add fieldNode
+        /*
+        if (Modifier.isStatic(field.getModifiers)) {
+          inStaticFields add fieldNode
+          fieldNode setParent inStaticFields
+        }
+        else {
+          inFields add fieldNode
+          fieldNode setParent inFields
+        }*/
+      }
+      superClass = superClass.getSuperclass
+    }*/
+    //nodeArr.foreach(n => if (n.getChildCount > 0) node add n)
+  }
+
+  def inspect(obj: Value, name: String) {
+    val panel = new JFrame("Object Inspection") {
+      setVisible(true)
+      val root = new DefaultMutableTreeNode(obj)
+      addChildren(obj.asInstanceOf[ObjectReference], root)
+      var tree = new JTree(root) {
+        addMouseListener(new MouseAdapter {
+          override def mouseClicked(e: MouseEvent) {
+            val node = getLastSelectedPathComponent
+            val nodeContent = node.asInstanceOf[DefaultMutableTreeNode]
+            val objt = nodeContent.getUserObject
+            if (nodeContent.getAllowsChildren() && nodeContent.getChildCount() == 0 && !ignoreNodes.contains(objt))
+              addChildren(objt, nodeContent)
+          }
+        })
+      }
+      var view = new JScrollPane(tree)
+      getContentPane add view
+    }
   }
 
   def trace(code: String) = Utils.runAsync {
@@ -225,8 +367,8 @@ def main(args: Array[String]) {
                   incrementCurrEvt(name)
                 }
               case methodEnterEvt: MethodEntryEvent =>
-               // println("Method entered: " + methodEnterEvt.method().name())
-               /*
+                // println("Method entered: " + methodEnterEvt.method().name())
+                /*
                 if (methodEnterEvt.method.name == "main") {
                   println("main method was exited. Events left are:")
                   evtReqs.foreach(evt =>
@@ -240,7 +382,7 @@ def main(args: Array[String]) {
                 if (!(ignoreMethods.contains(methodEnterEvt.method.name) || methodEnterEvt.method.name.startsWith("apply"))) {
                   try {
                     val toprint = try {
-                      if (methodEnterEvt.method.arguments.size > 0)
+                      if (false) //methodEnterEvt.method.arguments.size > 0)
                         "(%s)" format methodEnterEvt.method.arguments.map { n =>
                           val frame = methodEnterEvt.thread.frame(0)
                           val frameVal = frame.getValue(n)
@@ -248,7 +390,7 @@ def main(args: Array[String]) {
                           val argval = if (frameVal.isInstanceOf[ObjectReference] &&
                             !frameVal.isInstanceOf[StringReference] &&
                             !frameVal.isInstanceOf[ArrayReference]) {
-                            println("getting argval")
+                            //println("getting argval")
                             val objRef = frameVal.asInstanceOf[ObjectReference]
                             val mthd = objRef.referenceType.methodsByName("toString")(0)
 
@@ -272,7 +414,7 @@ def main(args: Array[String]) {
                           else {
                             frameVal
                           }
-                          println("Argval done")
+                          // println("Argval done")
                           s"arg ${n.name}: ${n.typeName} = $argval"
                         }.mkString(",")
                       else "()"
@@ -320,13 +462,13 @@ def main(args: Array[String]) {
                 }
                 evtReqs.foreach(x => x.enable)
               case methodExitEvt: MethodExitEvent =>
-               // println("Method exit: " + methodExitEvt.method.name)
-                if (methodExitEvt.method.name == "main") {
+                // println("Method exit: " + methodExitEvt.method.name)
+                /* if (methodExitEvt.method.name == "main") {
                   println("main method was exited. Events left are:")
                   evtReqs.foreach(evt =>
                     println("event is enabled? " + evt.isEnabled + ". and is " + evt)
                   )
-                }
+                }*/
                 if (!(ignoreMethods.contains(methodExitEvt.method.name) || methodExitEvt.method.name.startsWith("apply"))) {
                   try {
                     currThread = methodExitEvt.thread()
@@ -343,7 +485,7 @@ def main(args: Array[String]) {
                       methodExitEvt.location.lineNumber - lineNumOffset,
                       methodExitEvt.returnValue
                     )
-                   // println("Method exit evt done: " + methodExitEvt.method().name())
+                    // println("Method exit evt done: " + methodExitEvt.method().name())
                   }
                   catch {
                     case t: Throwable =>

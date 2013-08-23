@@ -111,6 +111,8 @@ class Builtins(
   val Background = new Tw.Background
   val Sound = new Tw.Sound
 
+  def inspectx[T](obj: T, name: String) {}
+  
   class inspectNode[T](objt: T, prnt: String, id: String) {
     val obj = objt
     val toPrint = if (objt != null)
