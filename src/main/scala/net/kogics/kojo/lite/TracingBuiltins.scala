@@ -9,6 +9,7 @@ import net.kogics.kojo.core.RichTurtleCommands
 import net.kogics.kojo.util.Utils
 
 object TracingBuiltins extends RichTurtleCommands {
+  def inspectx[T](obj: T, name: String){}
 
   //  lazy val kojoCtx = new NoOpKojoCtx
   //  lazy val spriteCanvas = new SpriteCanvas(kojoCtx)
